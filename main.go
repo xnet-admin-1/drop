@@ -39,11 +39,12 @@ const (
 
 type termSession struct {
 	mu   sync.Mutex
+	wmu  sync.Mutex // protects conn writes
 	ptmx *os.File
 	cmd  *exec.Cmd
 	ring [ringSize]byte
-	rpos int // next write position
-	rlen int // total bytes written (capped at ringSize)
+	rpos int
+	rlen int
 	conn *websocket.Conn
 }
 
@@ -93,7 +94,9 @@ func (s *termSession) init() error {
 			c := s.conn
 			s.mu.Unlock()
 			if c != nil {
+				s.wmu.Lock()
 				c.WriteMessage(websocket.BinaryMessage, buf[:n+1])
+				s.wmu.Unlock()
 			}
 		}
 	}()
@@ -207,7 +210,9 @@ func handleTerm(w http.ResponseWriter, r *http.Request) {
 			}
 		case msgHeartbeat:
 			conn.SetReadDeadline(time.Now().Add(90 * time.Second))
+			sess.wmu.Lock()
 			conn.WriteMessage(websocket.BinaryMessage, []byte{msgHeartbeat})
+			sess.wmu.Unlock()
 		}
 	}
 	close(closed)
