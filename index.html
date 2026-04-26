@@ -232,6 +232,7 @@ const ekDef=[
   {l:'ESC',seq:'\x1b'},{l:'TAB',seq:'\t'},{l:'CTRL',mod:true},{l:'ALT',mod:true},
   {l:'↑',seq:'\x1b[A'},{l:'↓',seq:'\x1b[B'},{l:'←',seq:'\x1b[D'},{l:'→',seq:'\x1b[C'},
   {l:'PgUp',scroll:-15},{l:'PgDn',scroll:15},
+  {l:'CPY',action:'copy'},{l:'PST',action:'paste'},
   {l:'HOME',seq:'\x1b[H'},{l:'END',seq:'\x1b[F'},{l:'DEL',seq:'\x1b[3~'}
 ];
 const ekState={CTRL:0,ALT:0};
@@ -253,6 +254,22 @@ function initExtraKeys(){
       el.addEventListener('mousedown',e=>{e.preventDefault();go();iv=setInterval(go,80)});
       el.addEventListener('mouseup',()=>{clearInterval(iv);el.style.background=''});
       el.addEventListener('mouseleave',()=>{clearInterval(iv);el.style.background=''});
+    }else if(k.action==='copy'){
+      el.addEventListener('click',()=>{
+        const sel=term.getSelection();
+        if(sel){
+          navigator.clipboard.writeText(sel).catch(()=>{const a=document.createElement('textarea');a.value=sel;a.style.cssText='position:fixed;left:-9999px';document.body.appendChild(a);a.select();document.execCommand('copy');document.body.removeChild(a)});
+          term.clearSelection();toast('Copied');
+        }
+        term.focus();
+      });
+    }else if(k.action==='paste'){
+      el.addEventListener('click',()=>{
+        navigator.clipboard.readText().then(t=>{
+          if(t&&ws&&ws.readyState===1){const e=new TextEncoder().encode(t);const buf=new Uint8Array(1+e.length);buf[0]=0x01;buf.set(e,1);ws.send(buf)}
+        }).catch(()=>{});
+        term.focus();
+      });
     }else{
       el.addEventListener('click',()=>{
         el.style.background='#1e293b';setTimeout(()=>el.style.background='',120);
@@ -273,6 +290,20 @@ function sendEk(seq){
   term.focus();
 }
 initExtraKeys();
+// Long-press to paste on terminal
+if(isMobile){
+  let lpTimer;
+  document.getElementById('term-box').addEventListener('touchstart',e=>{
+    lpTimer=setTimeout(()=>{
+      navigator.clipboard.readText().then(t=>{
+        if(t&&ws&&ws.readyState===1){const enc=new TextEncoder().encode(t);const buf=new Uint8Array(1+enc.length);buf[0]=0x01;buf.set(enc,1);ws.send(buf)}
+        toast('Pasted');
+      }).catch(()=>{});
+    },500);
+  });
+  document.getElementById('term-box').addEventListener('touchend',()=>clearTimeout(lpTimer));
+  document.getElementById('term-box').addEventListener('touchmove',()=>clearTimeout(lpTimer));
+}
 if(isMobile&&window.visualViewport){
   const ek=document.getElementById('extra-keys');
   const reposKeys=()=>{
