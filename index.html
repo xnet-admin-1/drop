@@ -132,13 +132,15 @@ function switchTab(name){
 
 function initTerm(){
   termInit=true;
-  term=new Terminal({cursorBlink:true,fontSize:14,scrollback:5000,tabStopWidth:4,fontFamily:'Menlo,Monaco,Consolas,monospace',fontWeightBold:'normal',allowProposedApi:true,theme:{background:'#0d1117',foreground:'#dcdcdc'}});
+  term=new Terminal({cursorBlink:true,fontSize:14,scrollback:5000,tabStopWidth:4,fontFamily:'Menlo,Monaco,Consolas,monospace',fontWeightBold:'normal',allowProposedApi:true,rightClickSelectsWord:true,theme:{background:'#0d1117',foreground:'#dcdcdc'}});
   fit=new FitAddon.FitAddon();
   term.loadAddon(fit);
   term.loadAddon(new WebLinksAddon.WebLinksAddon());
   term.open(document.getElementById('term-box'));
   fit.fit();
   term.onData(d=>{if(ws&&ws.readyState===1){const e=new TextEncoder().encode(d);const buf=new Uint8Array(1+e.length);buf[0]=0x01;buf.set(e,1);ws.send(buf)}});
+  // Auto-copy selection to clipboard
+  term.onSelectionChange(()=>{const s=term.getSelection();if(s)navigator.clipboard.writeText(s).catch(()=>{})});
   let resizeTimer;
   term.onResize(({cols,rows})=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(ws&&ws.readyState===1){const buf=new Uint8Array(5);buf[0]=0x04;buf[1]=cols>>8;buf[2]=cols&0xff;buf[3]=rows>>8;buf[4]=rows&0xff;ws.send(buf)}},150)});
   term.attachCustomKeyEventHandler(e=>{
