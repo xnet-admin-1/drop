@@ -509,7 +509,7 @@ class TerminalTouchSelection {
 
 	pasteFromClipboard() {
 		navigator.clipboard.readText().then(text => {
-			if (text) this.terminal.paste(text);
+			if (text) this.terminal.paste(text.replace(/[\r\n]+/g, ' ').trim());
 		}).catch(() => {});
 		this.forceClearSelection();
 	}
