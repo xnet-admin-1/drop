@@ -508,13 +508,19 @@ class TerminalTouchSelection {
 	}
 
 	pasteFromClipboard() {
+		const self = this;
 		navigator.clipboard.readText().then(text => {
 			if (!text) return;
-			// Clean: strip control chars, replace newlines with spaces
 			text = text.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '').replace(/[\r\n]+/g, ' ').trim();
-			if (text && this.callbacks.onPaste) this.callbacks.onPaste(text);
-		}).catch(() => {});
-		this.forceClearSelection();
+			if (text) {
+				if (self.callbacks.onPaste) self.callbacks.onPaste(text);
+				else self.terminal.paste(text);
+			}
+		}).catch(err => {
+			console.warn('clipboard read failed:', err);
+		}).finally(() => {
+			self.forceClearSelection();
+		});
 	}
 
 	selectAllText() {
