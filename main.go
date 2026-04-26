@@ -211,6 +211,12 @@ func handleTerm(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(listSessions())
 			return
+		case "reset":
+			sessionsMu.Lock()
+			sessionSeq = 0
+			sessionsMu.Unlock()
+			w.WriteHeader(200)
+			return
 		}
 		http.Error(w, "bad request", 400)
 		return

@@ -211,6 +211,7 @@ function clearAllSessions(){
   if(!n){toast('No sessions');return}
   if(!confirm('Close all '+n+' terminal session'+(n>1?'s':'')+'? This will kill all running processes.'))return;
   Object.keys(termSessions).forEach(id=>closeTermTab(id));
+  F('/ws/term?action=reset');
   toast('All sessions cleared');
 }
 function closeTermTab(id){
