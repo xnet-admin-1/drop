@@ -185,7 +185,7 @@ function resize(){
   if(!fit)return;
   try{
     fit.fit();
-    if(isMobile&&term.rows>4)term.resize(term.cols,term.rows-2);
+    if(isMobile&&term.rows>4)term.resize(term.cols,term.rows-3);
   }catch(e){}
 }
 window.addEventListener('resize',()=>{if(term&&fit)resize()});
