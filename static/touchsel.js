@@ -109,7 +109,6 @@ class TerminalTouchSelection {
 			screen.addEventListener("mousedown", function(e) {
 				if (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) {
 					e.stopImmediatePropagation();
-					e.preventDefault();
 				}
 			}, true);
 		}
@@ -218,6 +217,8 @@ class TerminalTouchSelection {
 		if (this.isSelecting && !this.isHandleDragging) {
 			if (this.isTerminalScrolling) return;
 			this.finalizeSelection();
+		} else if (!this.isSelecting) {
+			this.terminal.focus();
 		}
 	}
 
