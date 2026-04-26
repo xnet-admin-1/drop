@@ -136,19 +136,19 @@ function initTerm(){
   setTimeout(()=>{
     const scr=document.querySelector('.xterm-screen');
     if(!scr)return;
-    scr.style.touchAction='none';
-    let ty=null,acc=0;
-    scr.addEventListener('touchstart',e=>{ty=e.touches[0].clientY;acc=0},{capture:true,passive:true});
-    scr.addEventListener('touchmove',e=>{
-      if(ty===null||!e.touches.length)return;
+    let ty=null,acc=0,active=false;
+    document.addEventListener('touchstart',e=>{
+      if(scr.contains(e.target)){ty=e.touches[0].clientY;acc=0;active=true}
+    },true);
+    document.addEventListener('touchmove',e=>{
+      if(!active||ty===null||!e.touches.length)return;
       const y=e.touches[0].clientY;
       acc+=ty-y;ty=y;
       const lines=Math.trunc(acc/3);
       if(lines){term.scrollLines(lines);acc-=lines*3}
-      e.stopImmediatePropagation();
       e.preventDefault();
-    },true);
-    scr.addEventListener('touchend',()=>{ty=null},{capture:true,passive:true});
+    },{capture:true,passive:false});
+    document.addEventListener('touchend',()=>{ty=null;active=false},true);
   },100);
   term.onData(d=>{if(ws&&ws.readyState===1){const e=new TextEncoder().encode(d);const buf=new Uint8Array(1+e.length);buf[0]=0x01;buf.set(e,1);ws.send(buf)}});
   let resizeTimer;
