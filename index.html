@@ -144,7 +144,7 @@ function switchTab(name){
   if(name==='term'){
     if(!termInit){termInit=true;initExtraKeys();setupViewport();newTermTab()}
     const s=termSessions[activeSessionId];
-    if(s&&s.fit)setTimeout(()=>s.fit.fit(),0);
+    if(s&&s.fit)setTimeout(()=>{try{s.fit.fit()}catch(e){}},100);
   }
 }
 
@@ -203,7 +203,7 @@ function activateTab(id){
   if(!s)return;
   s.el.style.display='block';
   s.tabEl.classList.add('active');
-  setTimeout(()=>{s.fit.fit();s.term.focus()},0);
+  setTimeout(()=>{try{s.fit.fit()}catch(e){}s.term.focus()},50);
 }
 
 function clearAllSessions(){
