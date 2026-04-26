@@ -517,6 +517,8 @@ class TerminalTouchSelection {
 
 	pasteFromClipboard() {
 		navigator.clipboard.readText().then(text => {
+			// Strip control characters and trailing whitespace/newlines
+			text = text.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '').replace(/\s+$/, '');
 			if (text && this.callbacks.onPaste) this.callbacks.onPaste(text);
 		}).catch(() => {});
 		this.forceClearSelection();
