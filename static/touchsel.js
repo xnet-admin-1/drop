@@ -101,6 +101,17 @@ class TerminalTouchSelection {
 	}
 
 	attachEventListeners() {
+		// Suppress xterm's built-in selection on mobile by intercepting mousedown on xterm-screen
+		const screen = this.terminal.element.querySelector(".xterm-screen");
+		if (screen) {
+			screen.addEventListener("mousedown", e => {
+				// xterm synthesizes mouse events from touch - block them to prevent double selection
+				if (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) {
+					e.stopImmediatePropagation();
+				}
+			}, true);
+		}
+
 		this.boundHandlers.terminalTouchStart = this.onTerminalTouchStart.bind(this);
 		this.boundHandlers.terminalTouchMove = this.onTerminalTouchMove.bind(this);
 		this.boundHandlers.terminalTouchEnd = this.onTerminalTouchEnd.bind(this);
