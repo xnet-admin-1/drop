@@ -57,6 +57,7 @@ func (s *termSession) init() error {
 		return nil
 	}
 	cmd := exec.Command("/bin/bash", "-l")
+	cmd.Dir = os.Getenv("HOME")
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "LANG=en_US.UTF-8")
 	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: 120, Rows: 30})
 	if err != nil {
