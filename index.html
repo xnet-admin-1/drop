@@ -132,22 +132,22 @@ function initTerm(){
   term.loadAddon(new WebLinksAddon.WebLinksAddon());
   term.open(document.getElementById('term-box'));
   fit.fit();
-  // Smooth touch scroll on xterm viewport
+  // Smooth touch scroll - capture on xterm-screen before xterm's own handlers
   setTimeout(()=>{
-    const vp=document.querySelector('.xterm-viewport');
-    if(!vp)return;
+    const scr=document.querySelector('.xterm-screen');
+    if(!scr)return;
     let ty=null,acc=0;
-    vp.addEventListener('touchstart',e=>{ty=e.touches[0].clientY;acc=0},{passive:true});
-    vp.addEventListener('touchmove',e=>{
+    scr.addEventListener('touchstart',e=>{ty=e.touches[0].clientY;acc=0},true);
+    scr.addEventListener('touchmove',e=>{
       if(ty===null||!e.touches.length)return;
       const y=e.touches[0].clientY;
       acc+=ty-y;ty=y;
       const lines=Math.trunc(acc/3);
       if(lines){term.scrollLines(lines);acc-=lines*3}
+      e.stopImmediatePropagation();
       e.preventDefault();
-    },{passive:false});
-    vp.addEventListener('touchend',()=>{ty=null},{passive:true});
-    vp.style.touchAction='none';
+    },true);
+    scr.addEventListener('touchend',e=>{ty=null;e.stopImmediatePropagation()},true);
   },100);
   term.onData(d=>{if(ws&&ws.readyState===1){const e=new TextEncoder().encode(d);const buf=new Uint8Array(1+e.length);buf[0]=0x01;buf.set(e,1);ws.send(buf)}});
   let resizeTimer;
