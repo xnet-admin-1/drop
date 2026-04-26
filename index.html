@@ -53,6 +53,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 #term-tabs .tt .close:hover{opacity:1;color:var(--red)}
 #term-tabs .tt-add{padding:10px 14px;font-size:18px;color:var(--dim);cursor:pointer}
 #term-tabs .tt-add:hover{color:var(--accent)}
+#term-tabs .tt-clear{margin-left:auto;padding:10px 14px;font-size:12px;color:var(--red);cursor:pointer;opacity:.6}
+#term-tabs .tt-clear:hover{opacity:1}
 #extra-keys{display:none;background:#020817;flex-shrink:0;touch-action:manipulation;position:fixed;bottom:0;left:0;right:0;z-index:50}
 @media (hover:none) and (pointer:coarse){#extra-keys{display:flex}}
 #extra-keys .ek{flex:1;text-align:center;padding:10px 0;font-size:12px;font-family:monospace;color:#f8fafc;background:#0f1729;margin-right:1px;cursor:pointer;user-select:none;-webkit-user-select:none;transition:background .1s}
@@ -100,7 +102,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div>
 
 <div class="panel" id="term-panel">
-<div id="term-tabs"><span class="tt-add" onclick="newTermTab()">＋</span></div>
+<div id="term-tabs"><span class="tt-add" onclick="newTermTab()">＋</span><span class="tt-clear" onclick="clearAllSessions()">✕ Clear</span></div>
 <div id="term-box"></div>
 <div id="extra-keys"></div>
 </div>
@@ -204,6 +206,13 @@ function activateTab(id){
   setTimeout(()=>{s.fit.fit();s.term.focus()},0);
 }
 
+function clearAllSessions(){
+  const n=Object.keys(termSessions).length;
+  if(!n){toast('No sessions');return}
+  if(!confirm('Close all '+n+' terminal session'+(n>1?'s':'')+'? This will kill all running processes.'))return;
+  Object.keys(termSessions).forEach(id=>closeTermTab(id));
+  toast('All sessions cleared');
+}
 function closeTermTab(id){
   const s=termSessions[id];
   if(!s)return;
