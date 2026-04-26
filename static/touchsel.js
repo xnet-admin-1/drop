@@ -121,6 +121,7 @@ class TerminalTouchSelection {
 		this.terminal.element.addEventListener("touchstart", this.boundHandlers.terminalTouchStart, { passive: false });
 		this.terminal.element.addEventListener("touchmove", this.boundHandlers.terminalTouchMove, { passive: false });
 		this.terminal.element.addEventListener("touchend", this.boundHandlers.terminalTouchEnd, { passive: false });
+		this.terminal.element.addEventListener("contextmenu", e => e.preventDefault());
 
 		this.boundHandlers.handleTouchStart = this.onHandleTouchStart.bind(this);
 		this.boundHandlers.handleTouchMove = this.onHandleTouchMove.bind(this);
