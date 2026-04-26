@@ -392,6 +392,11 @@ func main() {
 		}
 	}))
 
+	http.HandleFunc("/log", func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		fmt.Printf("[CLIENT] %s\n", string(body))
+		w.WriteHeader(200)
+	})
 	http.Handle("/static/", http.FileServer(http.FS(staticDir)))
 	http.HandleFunc("/term", auth(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")

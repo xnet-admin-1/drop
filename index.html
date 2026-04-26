@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#0d1117">
 <link rel="manifest" href="/static/manifest.json">
 <link rel="stylesheet" href="/static/xterm.min.css">
-<link rel="stylesheet" href="/static/touchsel.css">
+<link rel="stylesheet" href="/static/touchsel.css?v=2">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#e6edf3;--dim:#8b949e;--accent:#58a6ff;--green:#3fb950;--red:#f85149}
@@ -114,7 +114,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <script src="/static/xterm.min.js"></script>
 <script src="/static/addon-fit.min.js"></script>
 <script src="/static/addon-web-links.min.js"></script>
-<script src="/static/touchsel.js"></script>
+<script src="/static/touchsel.js?v=2"></script>
 <script>
 const F=(u,o)=>fetch(u,{...o});
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1500)}
@@ -140,6 +140,14 @@ function initTerm(){
   term.loadAddon(new WebLinksAddon.WebLinksAddon());
   term.open(document.getElementById('term-box'));
   fit.fit();
+  if(isMobile){
+    const box=document.getElementById('term-box');
+    box.style.position='relative';
+    new TerminalTouchSelection(term,box,{
+      onCopy:()=>toast('Copied'),
+      onPaste:t=>{if(ws&&ws.readyState===1){const e=new TextEncoder().encode(t);const buf=new Uint8Array(1+e.length);buf[0]=0x01;buf.set(e,1);ws.send(buf)}}
+    });
+  }
   term.onData(d=>{if(ws&&ws.readyState===1){const e=new TextEncoder().encode(d);const buf=new Uint8Array(1+e.length);buf[0]=0x01;buf.set(e,1);ws.send(buf)}});
   let resizeTimer;
   term.onResize(({cols,rows})=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(ws&&ws.readyState===1){const buf=new Uint8Array(5);buf[0]=0x04;buf[1]=cols>>8;buf[2]=cols&0xff;buf[3]=rows>>8;buf[4]=rows&0xff;ws.send(buf)}},150)});
@@ -266,16 +274,6 @@ function sendEk(seq){
   term.focus();
 }
 initExtraKeys();
-if(isMobile){
-  try{
-    const box=document.getElementById('term-box');
-    box.style.position='relative';
-    new TerminalTouchSelection(term,box,{
-      onCopy:()=>toast('Copied'),
-      onPaste:t=>{if(ws&&ws.readyState===1){const e=new TextEncoder().encode(t);const buf=new Uint8Array(1+e.length);buf[0]=0x01;buf.set(e,1);ws.send(buf)}}
-    });
-  }catch(e){console.error('TouchSelection init failed:',e)}
-}
 if(isMobile&&window.visualViewport){
   const ek=document.getElementById('extra-keys');
   const reposKeys=()=>{
