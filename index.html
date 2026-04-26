@@ -141,8 +141,8 @@ function initTerm(){
     const dy=touchY-e.touches[0].clientY;
     touchY=e.touches[0].clientY;
     touchAcc+=dy;
-    const lines=Math.trunc(touchAcc/4);
-    if(lines!==0){term.scrollLines(lines);touchAcc-=lines*4}
+    const lines=Math.trunc(touchAcc/2);
+    if(lines!==0){term.scrollLines(lines);touchAcc-=lines*2}
     e.preventDefault();
   },{passive:false});
   el.addEventListener('touchend',()=>{touchY=null;touchAcc=0},{passive:true});
