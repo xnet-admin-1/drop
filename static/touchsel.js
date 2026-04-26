@@ -105,9 +105,9 @@ class TerminalTouchSelection {
 		this.boundHandlers.terminalTouchMove = this.onTerminalTouchMove.bind(this);
 		this.boundHandlers.terminalTouchEnd = this.onTerminalTouchEnd.bind(this);
 
-		this.terminal.element.addEventListener("touchstart", this.boundHandlers.terminalTouchStart, { passive: false });
-		this.terminal.element.addEventListener("touchmove", this.boundHandlers.terminalTouchMove, { passive: false });
-		this.terminal.element.addEventListener("touchend", this.boundHandlers.terminalTouchEnd, { passive: false });
+		this.terminal.element.addEventListener("touchstart", this.boundHandlers.terminalTouchStart, { passive: true });
+		this.terminal.element.addEventListener("touchmove", this.boundHandlers.terminalTouchMove, { passive: true });
+		this.terminal.element.addEventListener("touchend", this.boundHandlers.terminalTouchEnd, { passive: true });
 		this.terminal.element.addEventListener("contextmenu", e => e.preventDefault());
 
 		this.boundHandlers.handleTouchStart = this.onHandleTouchStart.bind(this);
@@ -183,7 +183,6 @@ class TerminalTouchSelection {
 		if (deltaX > this.moveThreshold || deltaY > this.moveThreshold) {
 			if (this.tapHoldTimeout) { clearTimeout(this.tapHoldTimeout); this.tapHoldTimeout = null; }
 			if (this.isSelecting && !this.isHandleDragging && this.isSelectionTouchActive) {
-				event.preventDefault();
 				this.extendSelection(touch);
 			}
 		}
