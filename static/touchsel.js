@@ -203,6 +203,7 @@ class TerminalTouchSelection {
 	}
 
 	onTerminalTouchEnd(event) {
+		const hadTimer = !!this.tapHoldTimeout;
 		if (this.tapHoldTimeout) { clearTimeout(this.tapHoldTimeout); this.tapHoldTimeout = null; }
 
 		const shouldClear = this.isSelecting && !this.isHandleDragging &&
@@ -212,12 +213,12 @@ class TerminalTouchSelection {
 		this.pendingSelectionClearTouch = null;
 		this.isSelectionTouchActive = false;
 
-		if (shouldClear) { this.clearSelection(); return; }
+		if (shouldClear) { this.clearSelection(); this.terminal.focus(); return; }
 
 		if (this.isSelecting && !this.isHandleDragging) {
 			if (this.isTerminalScrolling) return;
 			this.finalizeSelection();
-		} else if (!this.isSelecting) {
+		} else if (!this.isSelecting && hadTimer) {
 			this.terminal.focus();
 		}
 	}
@@ -535,9 +536,10 @@ class TerminalTouchSelection {
 		if (!this.terminal.selectAll) return;
 		this.terminal.selectAll();
 		this.currentSelection = this.terminal.getSelection();
-		this.isSelecting = !!this.currentSelection;
+		this.isSelecting = true;
 		this.selectionStart = null;
 		this.selectionEnd = null;
+		this.selectionProtected = false;
 		this.hideHandles();
 		if (this.currentSelection) this.showContextMenu();
 	}
