@@ -145,11 +145,7 @@ function initTerm(){
     box.style.position='relative';
     new TerminalTouchSelection(term,box,{
       onCopy:()=>toast('Copied'),
-      onPaste:t=>{if(ws&&ws.readyState===1){
-      // Wrap in bracketed paste mode so shell doesn't execute newlines
-      const prefix='\x1b[200~',suffix='\x1b[201~';
-      const full=prefix+t+suffix;
-      const e=new TextEncoder().encode(full);const buf=new Uint8Array(1+e.length);buf[0]=0x01;buf.set(e,1);ws.send(buf)}}
+      onPaste:t=>{if(ws&&ws.readyState===1){const e=new TextEncoder().encode(t);const buf=new Uint8Array(1+e.length);buf[0]=0x01;buf.set(e,1);ws.send(buf)}}
     });
   }
   term.onData(d=>{if(ws&&ws.readyState===1){const e=new TextEncoder().encode(d);const buf=new Uint8Array(1+e.length);buf[0]=0x01;buf.set(e,1);ws.send(buf)}});
