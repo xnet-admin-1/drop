@@ -162,7 +162,6 @@ async function newTermTab(){
   t.open(el);
 
   if(isMobile){
-    el.style.position='relative';
     new TerminalTouchSelection(t,el,{
       onCopy:()=>toast('Copied'),
       onPaste:text=>{const s=termSessions[id];if(s&&s.ws&&s.ws.readyState===1){const e=new TextEncoder().encode(text);const buf=new Uint8Array(1+e.length);buf[0]=0x01;buf.set(e,1);s.ws.send(buf)}}
