@@ -133,17 +133,19 @@ function initTerm(){
   term.open(document.getElementById('term-box'));
   fit.fit();
   // Touch scroll: convert swipe to multi-line scroll
-  let touchY=null;
+  let touchY=null,touchAcc=0;
   const el=document.getElementById('term-box');
-  el.addEventListener('touchstart',e=>{touchY=e.touches[0].clientY},{passive:true});
+  el.addEventListener('touchstart',e=>{touchY=e.touches[0].clientY;touchAcc=0},{passive:true});
   el.addEventListener('touchmove',e=>{
     if(touchY===null)return;
     const dy=touchY-e.touches[0].clientY;
-    const lines=Math.trunc(dy/8);
-    if(lines!==0){term.scrollLines(lines);touchY=e.touches[0].clientY}
+    touchY=e.touches[0].clientY;
+    touchAcc+=dy;
+    const lines=Math.trunc(touchAcc/4);
+    if(lines!==0){term.scrollLines(lines);touchAcc-=lines*4}
     e.preventDefault();
   },{passive:false});
-  el.addEventListener('touchend',()=>{touchY=null},{passive:true});
+  el.addEventListener('touchend',()=>{touchY=null;touchAcc=0},{passive:true});
   term.onData(d=>{if(ws&&ws.readyState===1){const e=new TextEncoder().encode(d);const buf=new Uint8Array(1+e.length);buf[0]=0x01;buf.set(e,1);ws.send(buf)}});
   let resizeTimer;
   term.onResize(({cols,rows})=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(ws&&ws.readyState===1){const buf=new Uint8Array(5);buf[0]=0x04;buf[1]=cols>>8;buf[2]=cols&0xff;buf[3]=rows>>8;buf[4]=rows&0xff;ws.send(buf)}},150)});
