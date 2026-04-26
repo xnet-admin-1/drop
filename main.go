@@ -48,7 +48,60 @@ type termSession struct {
 	conn *websocket.Conn
 }
 
-var sess termSession
+var (
+	sessions   = make(map[string]*termSession)
+	sessionsMu sync.Mutex
+	sessionSeq int
+)
+
+func getSession(id string) *termSession {
+	sessionsMu.Lock()
+	defer sessionsMu.Unlock()
+	return sessions[id]
+}
+
+func newSession() (string, *termSession) {
+	sessionsMu.Lock()
+	defer sessionsMu.Unlock()
+	sessionSeq++
+	id := fmt.Sprintf("%d", sessionSeq)
+	s := &termSession{}
+	sessions[id] = s
+	return id, s
+}
+
+func deleteSession(id string) {
+	sessionsMu.Lock()
+	s := sessions[id]
+	delete(sessions, id)
+	sessionsMu.Unlock()
+	if s != nil {
+		s.mu.Lock()
+		if s.ptmx != nil {
+			s.ptmx.Close()
+			s.ptmx = nil
+		}
+		if s.cmd != nil && s.cmd.Process != nil {
+			s.cmd.Process.Kill()
+		}
+		s.mu.Unlock()
+	}
+}
+
+func listSessions() []string {
+	sessionsMu.Lock()
+	defer sessionsMu.Unlock()
+	ids := make([]string, 0, len(sessions))
+	for id, s := range sessions {
+		s.mu.Lock()
+		alive := s.ptmx != nil
+		s.mu.Unlock()
+		if alive {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
 
 func (s *termSession) init() error {
 	s.mu.Lock()
@@ -138,6 +191,38 @@ func (s *termSession) detach(conn *websocket.Conn) {
 }
 
 func handleTerm(w http.ResponseWriter, r *http.Request) {
+	// REST endpoints for session management
+	if r.Header.Get("Upgrade") == "" {
+		switch r.URL.Query().Get("action") {
+		case "new":
+			id, s := newSession()
+			if err := s.init(); err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"id": id})
+			return
+		case "close":
+			deleteSession(r.URL.Query().Get("id"))
+			w.WriteHeader(200)
+			return
+		case "list":
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(listSessions())
+			return
+		}
+		http.Error(w, "bad request", 400)
+		return
+	}
+
+	id := r.URL.Query().Get("id")
+	sess := getSession(id)
+	if sess == nil {
+		http.Error(w, "no such session", 404)
+		return
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
@@ -149,11 +234,6 @@ func handleTerm(w http.ResponseWriter, r *http.Request) {
 		conn.SetReadDeadline(time.Now().Add(90 * time.Second))
 		return nil
 	})
-
-	if err := sess.init(); err != nil {
-		conn.WriteMessage(websocket.BinaryMessage, append([]byte{msgData}, []byte("pty error: "+err.Error())...))
-		return
-	}
 
 	// Wait for initial resize from client before replay
 	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
@@ -392,11 +472,6 @@ func main() {
 		}
 	}))
 
-	http.HandleFunc("/log", func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		fmt.Printf("[CLIENT] %s\n", string(body))
-		w.WriteHeader(200)
-	})
 	http.Handle("/static/", http.FileServer(http.FS(staticDir)))
 	http.HandleFunc("/term", auth(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")

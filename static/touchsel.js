@@ -50,13 +50,11 @@ class TerminalTouchSelection {
 	}
 
 	init() {
-		console.log("TerminalTouchSelection.init() called");
 		this.createSelectionOverlay();
 		this.createHandles();
 		this.createContextMenu();
 		this.attachEventListeners();
 		this.updateCellDimensions();
-		console.log("TerminalTouchSelection.init() done, cellDimensions:", this.cellDimensions);
 	}
 
 	createSelectionOverlay() {
@@ -138,7 +136,6 @@ class TerminalTouchSelection {
 	}
 
 	onTerminalTouchStart(event) {
-		console.log("touchStart, touches:", event.touches.length, "isSelecting:", this.isSelecting);
 		if (event.touches.length !== 1) return;
 		const touch = event.touches[0];
 		this.touchStartTime = Date.now();
@@ -363,7 +360,6 @@ class TerminalTouchSelection {
 		this.showContextMenu();
 
 		if (navigator.vibrate) navigator.vibrate(50);
-		console.log("startSelection done, overlay in DOM:", !!this.selectionOverlay.parentNode, "overlay parent:", this.selectionOverlay.parentNode?.id || this.selectionOverlay.parentNode?.className);
 	}
 
 	extendSelection(touch) {
@@ -402,12 +398,9 @@ class TerminalTouchSelection {
 	}
 
 	showHandles() {
-		console.log("showHandles called, start:", this.selectionStart, "end:", this.selectionEnd);
 		this.startHandle.style.display = "block";
 		this.endHandle.style.display = "block";
 		this.updateHandlePositions();
-		console.log("startHandle style:", this.startHandle.style.cssText);
-		console.log("endHandle style:", this.endHandle.style.cssText);
 	}
 
 	hideHandles() {
@@ -442,7 +435,6 @@ class TerminalTouchSelection {
 
 		const startPos = this.terminalCoordsToPixels(logicalStart);
 		const endPos = this.terminalCoordsToPixels(logicalEnd);
-		console.log("handlePos: cell=", this.cellDimensions, "startPos=", startPos, "endPos=", endPos, "logStart=", logicalStart, "logEnd=", logicalEnd);
 
 		if (startPos) {
 			this.startHandle.style.display = "block";

@@ -46,6 +46,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .lightbox img{max-width:95vw;max-height:95vh;border-radius:8px}
 .lightbox.on{display:flex}
 #term-panel{background:#000;overflow:hidden;overscroll-behavior:none}
+#term-tabs{display:flex;align-items:center;background:#010409;border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;-webkit-overflow-scrolling:touch}
+#term-tabs .tt{padding:6px 12px;font-size:12px;color:var(--dim);cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;display:flex;align-items:center;gap:6px}
+#term-tabs .tt.active{color:var(--accent);border-bottom-color:var(--accent)}
+#term-tabs .tt .close{font-size:10px;opacity:.5;padding:2px}
+#term-tabs .tt .close:hover{opacity:1;color:var(--red)}
+#term-tabs .tt-add{padding:6px 10px;font-size:14px;color:var(--dim);cursor:pointer}
+#term-tabs .tt-add:hover{color:var(--accent)}
 #extra-keys{display:none;background:#020817;flex-shrink:0;touch-action:manipulation;position:fixed;bottom:0;left:0;right:0;z-index:50}
 @media (hover:none) and (pointer:coarse){#extra-keys{display:flex}}
 #extra-keys .ek{flex:1;text-align:center;padding:10px 0;font-size:12px;font-family:monospace;color:#f8fafc;background:#0f1729;margin-right:1px;cursor:pointer;user-select:none;-webkit-user-select:none;transition:background .1s}
@@ -53,7 +60,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 #extra-keys .ek:active{background:#1e293b}
 #extra-keys .ek.armed{background:#1a3a1a;color:#88ff88}
 #extra-keys .ek.locked{background:#3a1a1a;color:#ff8888}
-#term-box{flex:1;overflow:hidden;min-height:0;-webkit-touch-callout:none}
+#term-box{flex:1;overflow:hidden;min-height:0;-webkit-touch-callout:none;position:relative}
 @media (hover:none) and (pointer:coarse){
   #term-box .xterm-viewport{overflow-y:scroll!important;scroll-behavior:smooth;overscroll-behavior:contain}
   #term-box .xterm-viewport::-webkit-scrollbar{width:30px;background:#0d1117}
@@ -93,6 +100,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div>
 
 <div class="panel" id="term-panel">
+<div id="term-tabs"><span class="tt-add" onclick="newTermTab()">＋</span></div>
 <div id="term-box"></div>
 <div id="extra-keys"></div>
 </div>
@@ -121,88 +129,140 @@ function toast(m){const t=document.getElementById('toast');t.textContent=m;t.cla
 function fmt(b){if(b<1024)return b+'B';if(b<1048576)return(b/1024).toFixed(1)+'KB';return(b/1048576).toFixed(1)+'MB'}
 function ext(n){const i=n.lastIndexOf('.');return i>0?n.slice(i+1).toUpperCase():'?'}
 
-// Tab switching
-let termInit=false,term,fit,ws;
+// Terminal - multi-session tabs
+let termInit=false;
 const isMobile=matchMedia('(hover:none) and (pointer:coarse)').matches||('ontouchstart' in window);
+const termSessions={};  // id -> {term, fit, ws, el, retries, scrollTimer, hbInterval, lastPong, tabEl}
+let activeSessionId=null;
+
 function switchTab(name){
   document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',t.textContent.trim()===(name==='drop'?'Files':'Terminal')));
   document.getElementById('drop-panel').classList.toggle('active',name==='drop');
   document.getElementById('term-panel').classList.toggle('active',name==='term');
-  if(name==='term'&&!termInit)initTerm();
-  if(name==='term'&&fit)setTimeout(()=>fit.fit(),0);
+  if(name==='term'){
+    if(!termInit){termInit=true;initExtraKeys();setupViewport();newTermTab()}
+    const s=termSessions[activeSessionId];
+    if(s&&s.fit)setTimeout(()=>s.fit.fit(),0);
+  }
 }
 
-function initTerm(){
-  termInit=true;
-  term=new Terminal({cursorBlink:true,fontSize:14,scrollback:5000,tabStopWidth:4,fontFamily:'Menlo,Monaco,Consolas,monospace',fontWeightBold:'normal',allowProposedApi:true,theme:{background:'#0d1117',foreground:'#dcdcdc'}});
-  fit=new FitAddon.FitAddon();
-  term.loadAddon(fit);
-  term.loadAddon(new WebLinksAddon.WebLinksAddon());
-  term.open(document.getElementById('term-box'));
-  fit.fit();
+async function newTermTab(){
+  const r=await(await F('/ws/term?action=new')).json();
+  const id=r.id;
+  const el=document.createElement('div');
+  el.style.cssText='position:absolute;inset:0;display:none';
+  document.getElementById('term-box').appendChild(el);
+
+  const t=new Terminal({cursorBlink:true,fontSize:14,scrollback:5000,tabStopWidth:4,fontFamily:'Menlo,Monaco,Consolas,monospace',fontWeightBold:'normal',allowProposedApi:true,theme:{background:'#0d1117',foreground:'#dcdcdc'}});
+  const f=new FitAddon.FitAddon();
+  t.loadAddon(f);
+  t.loadAddon(new WebLinksAddon.WebLinksAddon());
+  t.open(el);
+
   if(isMobile){
-    const box=document.getElementById('term-box');
-    box.style.position='relative';
-    new TerminalTouchSelection(term,box,{
+    el.style.position='relative';
+    new TerminalTouchSelection(t,el,{
       onCopy:()=>toast('Copied'),
-      onPaste:t=>{if(ws&&ws.readyState===1){const e=new TextEncoder().encode(t);const buf=new Uint8Array(1+e.length);buf[0]=0x01;buf.set(e,1);ws.send(buf)}}
+      onPaste:text=>{const s=termSessions[id];if(s&&s.ws&&s.ws.readyState===1){const e=new TextEncoder().encode(text);const buf=new Uint8Array(1+e.length);buf[0]=0x01;buf.set(e,1);s.ws.send(buf)}}
     });
   }
-  term.onData(d=>{if(ws&&ws.readyState===1){const e=new TextEncoder().encode(d);const buf=new Uint8Array(1+e.length);buf[0]=0x01;buf.set(e,1);ws.send(buf)}});
+
+  t.onData(d=>{const s=termSessions[id];if(s&&s.ws&&s.ws.readyState===1){const e=new TextEncoder().encode(d);const buf=new Uint8Array(1+e.length);buf[0]=0x01;buf.set(e,1);s.ws.send(buf)}});
   let resizeTimer;
-  term.onResize(({cols,rows})=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(ws&&ws.readyState===1){const buf=new Uint8Array(5);buf[0]=0x04;buf[1]=cols>>8;buf[2]=cols&0xff;buf[3]=rows>>8;buf[4]=rows&0xff;ws.send(buf)}},150)});
-  term.attachCustomKeyEventHandler(e=>{
-    if(e.type==='keydown'&&e.ctrlKey&&!e.shiftKey&&e.key==='c'&&term.hasSelection()){navigator.clipboard.writeText(term.getSelection());term.clearSelection();return false}
-    if(e.type==='keydown'&&e.ctrlKey&&e.shiftKey&&e.key==='V'){navigator.clipboard.readText().then(t=>{if(ws&&ws.readyState===1){const e=new TextEncoder().encode(t);const buf=new Uint8Array(1+e.length);buf[0]=0x01;buf.set(e,1);ws.send(buf)}});return false}
-    if(e.type==='keydown'&&e.ctrlKey&&e.shiftKey&&e.key==='A'){term.selectAll();return false}
+  t.onResize(({cols,rows})=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{const s=termSessions[id];if(s&&s.ws&&s.ws.readyState===1){const buf=new Uint8Array(5);buf[0]=0x04;buf[1]=cols>>8;buf[2]=cols&0xff;buf[3]=rows>>8;buf[4]=rows&0xff;s.ws.send(buf)}},150)});
+  t.attachCustomKeyEventHandler(e=>{
+    if(e.type==='keydown'&&e.ctrlKey&&!e.shiftKey&&e.key==='c'&&t.hasSelection()){navigator.clipboard.writeText(t.getSelection());t.clearSelection();return false}
+    if(e.type==='keydown'&&e.ctrlKey&&e.shiftKey&&e.key==='V'){navigator.clipboard.readText().then(text=>{const s=termSessions[id];if(s&&s.ws&&s.ws.readyState===1){const e=new TextEncoder().encode(text);const buf=new Uint8Array(1+e.length);buf[0]=0x01;buf.set(e,1);s.ws.send(buf)}});return false}
     return true;
   });
-  connectWs();
+
+  // Tab element
+  const tabEl=document.createElement('span');
+  tabEl.className='tt';
+  tabEl.innerHTML='Shell '+id+' <span class="close" onclick="event.stopPropagation();closeTermTab(\''+id+'\')">✕</span>';
+  tabEl.onclick=()=>activateTab(id);
+  const addBtn=document.querySelector('.tt-add');
+  addBtn.parentNode.insertBefore(tabEl,addBtn);
+
+  termSessions[id]={term:t,fit:f,ws:null,el,retries:0,scrollTimer:null,hbInterval:null,lastPong:0,tabEl};
+  activateTab(id);
+  connectSession(id);
 }
 
-function connectWs(){
-  if(ws){try{ws.onclose=null;ws.close()}catch(e){}}
+function activateTab(id){
+  if(activeSessionId===id)return;
+  // Hide current
+  if(activeSessionId&&termSessions[activeSessionId]){
+    termSessions[activeSessionId].el.style.display='none';
+    termSessions[activeSessionId].tabEl.classList.remove('active');
+  }
+  activeSessionId=id;
+  const s=termSessions[id];
+  if(!s)return;
+  s.el.style.display='block';
+  s.tabEl.classList.add('active');
+  setTimeout(()=>{s.fit.fit();s.term.focus()},0);
+}
+
+function closeTermTab(id){
+  const s=termSessions[id];
+  if(!s)return;
+  if(s.ws){s.ws.onclose=null;try{s.ws.close()}catch(e){}}
+  clearInterval(s.hbInterval);
+  s.term.dispose();
+  s.el.remove();
+  s.tabEl.remove();
+  F('/ws/term?action=close&id='+id);
+  delete termSessions[id];
+  if(activeSessionId===id){
+    activeSessionId=null;
+    const ids=Object.keys(termSessions);
+    if(ids.length)activateTab(ids[ids.length-1]);
+  }
+}
+
+function connectSession(id){
+  const s=termSessions[id];
+  if(!s)return;
+  if(s.ws){try{s.ws.onclose=null;s.ws.close()}catch(e){}}
   const proto=location.protocol==='https:'?'wss:':'ws:';
-  ws=new WebSocket(proto+'//'+location.host+'/ws/term');
+  const ws=new WebSocket(proto+'//'+location.host+'/ws/term?id='+id);
   ws.binaryType='arraybuffer';
+  s.ws=ws;
   ws.onopen=()=>{
-    retries=0;term.reset();
-    try{fit.fit()}catch(e){}
-    // Send resize immediately so PTY knows dimensions before replay
-    const buf=new Uint8Array(5);buf[0]=0x04;buf[1]=term.cols>>8;buf[2]=term.cols&0xff;buf[3]=term.rows>>8;buf[4]=term.rows&0xff;
+    s.retries=0;s.term.reset();
+    try{s.fit.fit()}catch(e){}
+    const buf=new Uint8Array(5);buf[0]=0x04;buf[1]=s.term.cols>>8;buf[2]=s.term.cols&0xff;buf[3]=s.term.rows>>8;buf[4]=s.term.rows&0xff;
     ws.send(buf);
-    startHeartbeat();
-    // Scroll to bottom after replay finishes
-    setTimeout(()=>term.scrollToBottom(),500);
+    s.lastPong=Date.now();
+    s.hbInterval=setInterval(()=>{if(Date.now()-s.lastPong>60000){ws.close();return}if(ws.readyState===1)ws.send(new Uint8Array([0x07]))},25000);
+    setTimeout(()=>s.term.scrollToBottom(),500);
   };
   ws.onmessage=e=>{
     const d=new Uint8Array(e.data);
-    if(d[0]===0x01){term.write(d.subarray(1));clearTimeout(scrollTimer);scrollTimer=setTimeout(()=>term.scrollToBottom(),200)}
-    else if(d[0]===0x07)lastPong=Date.now();
+    if(d[0]===0x01){s.term.write(d.subarray(1));clearTimeout(s.scrollTimer);s.scrollTimer=setTimeout(()=>s.term.scrollToBottom(),200)}
+    else if(d[0]===0x07)s.lastPong=Date.now();
   };
-  ws.onclose=()=>{stopHeartbeat();reconnect()};
+  ws.onclose=()=>{clearInterval(s.hbInterval);reconnectSession(id)};
   ws.onerror=()=>{};
 }
 
-let retries=0,scrollTimer;
-function reconnect(){
-  if(retries===0)term.write('\r\n\x1b[31m[reconnecting');
-  if(retries>=20){term.write(' gave up]\x1b[0m\r\n');return}
-  retries++;
-  term.write('.');
-  setTimeout(connectWs,Math.min(retries*1000,10000));
+function reconnectSession(id){
+  const s=termSessions[id];
+  if(!s)return;
+  if(s.retries===0)s.term.write('\r\n\x1b[31m[reconnecting');
+  if(s.retries>=20){s.term.write(' gave up]\x1b[0m\r\n');return}
+  s.retries++;
+  s.term.write('.');
+  setTimeout(()=>connectSession(id),Math.min(s.retries*1000,10000));
 }
-
-let hbInterval,lastPong=Date.now();
-function startHeartbeat(){lastPong=Date.now();hbInterval=setInterval(()=>{if(Date.now()-lastPong>60000){ws.close();return}if(ws&&ws.readyState===1)ws.send(new Uint8Array([0x07]))},25000)}
-function stopHeartbeat(){clearInterval(hbInterval)}
 
 function resize(){
-  if(!fit)return;
-  try{fit.fit()}catch(e){}
+  const s=termSessions[activeSessionId];
+  if(s&&s.fit)try{s.fit.fit()}catch(e){}
 }
-window.addEventListener('resize',()=>{if(term&&fit)resize()});
-new ResizeObserver(()=>{if(term&&fit&&document.getElementById('term-panel').classList.contains('active'))resize()}).observe(document.getElementById('term-box'));
+window.addEventListener('resize',resize);
+new ResizeObserver(()=>{if(document.getElementById('term-panel').classList.contains('active'))resize()}).observe(document.getElementById('term-box'));
 
 // Files
 async function load(){
@@ -234,7 +294,7 @@ async function saveCreds(){const user=document.getElementById('cUser').value.tri
 
 function refresh(){
   if(document.getElementById('drop-panel').classList.contains('active'))load();
-  else if(ws&&sess){term.clear();ws.onclose=null;ws.close();connectWs()}
+  else if(activeSessionId&&termSessions[activeSessionId]){const s=termSessions[activeSessionId];s.term.clear();connectSession(activeSessionId)}
 }
 
 // Extra keys
@@ -264,26 +324,29 @@ function initExtraKeys(){
   });
 }
 function sendEk(seq){
-  if(!ws||ws.readyState!==1)return;
+  const s=termSessions[activeSessionId];
+  if(!s||!s.ws||s.ws.readyState!==1)return;
   let data=seq;
   if(ekState.ALT&&seq.length===1)data='\x1b'+seq;
   if(ekState.CTRL&&seq.length===1){const c=seq.toLowerCase().charCodeAt(0)-96;if(c>0&&c<27)data=String.fromCharCode(c)}
   const e=new TextEncoder().encode(data);
-  const buf=new Uint8Array(1+e.length);buf[0]=0x01;buf.set(e,1);ws.send(buf);
+  const buf=new Uint8Array(1+e.length);buf[0]=0x01;buf.set(e,1);s.ws.send(buf);
   ['CTRL','ALT'].forEach(m=>{if(ekState[m]===1){ekState[m]=0;document.querySelector(`.ek[data-key="${m}"]`).className='ek'}});
-  term.focus();
+  s.term.focus();
 }
 initExtraKeys();
+function setupViewport(){
 if(isMobile&&window.visualViewport){
   const ek=document.getElementById('extra-keys');
   const reposKeys=()=>{
     const off=window.innerHeight-visualViewport.height-visualViewport.offsetTop;
     ek.style.bottom=Math.max(0,off)+'px';
     document.body.style.height=visualViewport.height+'px';
-    if(term&&fit)try{fit.fit()}catch(e){}
+    if(activeSessionId&&termSessions[activeSessionId])try{termSessions[activeSessionId].fit.fit()}catch(e){}
   };
   visualViewport.addEventListener('resize',reposKeys);
   visualViewport.addEventListener('scroll',reposKeys);
+}
 }
 
 load();
