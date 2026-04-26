@@ -47,7 +47,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 #term-panel{background:#000;overflow:hidden;overscroll-behavior:none}
 #extra-keys{display:none;background:#020817;flex-shrink:0;touch-action:manipulation;position:fixed;bottom:0;left:0;right:0;z-index:50}
 @media (hover:none) and (pointer:coarse){#extra-keys{display:flex}}
-.ts-overlay{position:absolute;inset:0;pointer-events:none;z-index:100;overflow:hidden}
+.ts-overlay{position:absolute;inset:0;pointer-events:none;z-index:100}
 .ts-handle{position:absolute;width:24px;height:24px;background:#2196F3;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.3);display:none;pointer-events:auto;touch-action:none;z-index:101;border-radius:50% 50% 50% 0}
 .ts-handle-start{transform:rotate(180deg) translateX(87%)}
 .ts-handle-end{transform:rotate(90deg) translateY(-13%)}
@@ -290,9 +290,8 @@ if(isMobile){
       });
       this.overlay.append(this.hStart,this.hEnd,this.menu);
       setTimeout(()=>{
-        const box=document.getElementById('term-box');
-        if(box)box.style.position='relative';
-        box.appendChild(this.overlay);
+        term.element.style.position='relative';
+        term.element.appendChild(this.overlay);
         this.updateCell();
         term.element.addEventListener('touchstart',e=>this.onTouchStart(e),{passive:false});
         term.element.addEventListener('touchmove',e=>this.onTouchMove(e),{passive:false});
@@ -320,10 +319,9 @@ if(isMobile){
       return{col:Math.max(0,Math.min(col,term.cols-1)),row:Math.max(0,row)};
     },
     coordsToPx(c){
-      const r=term.element.getBoundingClientRect(),cr=this.overlay.getBoundingClientRect();
       const vy=term.buffer.active.viewportY;
       if(c.row<vy||c.row>=vy+term.rows)return null;
-      return{x:c.col*this.cellW+(r.left-cr.left),y:(c.row-vy)*this.cellH+(r.top-cr.top)};
+      return{x:c.col*this.cellW,y:(c.row-vy)*this.cellH};
     },
     wordAt(c){
       const line=term.buffer.active.getLine(c.row);if(!line)return null;
@@ -360,11 +358,11 @@ if(isMobile){
       const ep=this.end?this.coordsToPx(this.end):null;
       if(!sp&&!ep){this.menu.style.display='none';return}
       this.menu.style.display='flex';
-      const mw=this.menu.offsetWidth||180,cr=this.overlay.getBoundingClientRect();
+      const mw=this.menu.offsetWidth||180,cw=term.element.offsetWidth;
       let mx=((sp?sp.x:ep.x)+(ep?ep.x:sp.x))/2-mw/2;
       let my=(sp?sp.y:ep.y)-44;
       if(my<4)my=(ep?ep.y:sp.y)+this.cellH+30;
-      mx=Math.max(4,Math.min(mx,cr.width-mw-4));
+      mx=Math.max(4,Math.min(mx,cw-mw-4));
       this.menu.style.left=mx+'px';this.menu.style.top=my+'px';
     },
     clear(){
