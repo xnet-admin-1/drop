@@ -132,10 +132,10 @@ function initTerm(){
   term.loadAddon(new WebLinksAddon.WebLinksAddon());
   term.open(document.getElementById('term-box'));
   fit.fit();
-  // Touch scroll: convert swipe to multi-line scroll
+  // Touch scroll: capture before xterm's handler
   let touchY=null,touchAcc=0;
   const el=document.getElementById('term-box');
-  el.addEventListener('touchstart',e=>{touchY=e.touches[0].clientY;touchAcc=0},{passive:true});
+  el.addEventListener('touchstart',e=>{touchY=e.touches[0].clientY;touchAcc=0},true);
   el.addEventListener('touchmove',e=>{
     if(touchY===null)return;
     const dy=touchY-e.touches[0].clientY;
@@ -144,8 +144,9 @@ function initTerm(){
     const lines=Math.trunc(touchAcc/2);
     if(lines!==0){term.scrollLines(lines);touchAcc-=lines*2}
     e.preventDefault();
-  },{passive:false});
-  el.addEventListener('touchend',()=>{touchY=null;touchAcc=0},{passive:true});
+    e.stopPropagation();
+  },true);
+  el.addEventListener('touchend',()=>{touchY=null;touchAcc=0},true);
   term.onData(d=>{if(ws&&ws.readyState===1){const e=new TextEncoder().encode(d);const buf=new Uint8Array(1+e.length);buf[0]=0x01;buf.set(e,1);ws.send(buf)}});
   let resizeTimer;
   term.onResize(({cols,rows})=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(ws&&ws.readyState===1){const buf=new Uint8Array(5);buf[0]=0x04;buf[1]=cols>>8;buf[2]=cols&0xff;buf[3]=rows>>8;buf[4]=rows&0xff;ws.send(buf)}},150)});
