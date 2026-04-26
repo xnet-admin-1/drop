@@ -509,7 +509,7 @@ class TerminalTouchSelection {
 	}
 
 	copySelection() {
-		const text = this.currentSelection || this.terminal.getSelection();
+		const text = (this.currentSelection || this.terminal.getSelection() || "").replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '').replace(/\n\s*\n[\s\n]*/g, '\n').trim();
 		if (text) navigator.clipboard.writeText(text).catch(() => {});
 		this.forceClearSelection();
 		if (this.callbacks.onCopy) this.callbacks.onCopy(text);
