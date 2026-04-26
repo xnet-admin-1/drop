@@ -132,24 +132,6 @@ function initTerm(){
   term.loadAddon(new WebLinksAddon.WebLinksAddon());
   term.open(document.getElementById('term-box'));
   fit.fit();
-  // Smooth touch scroll - capture on xterm-screen before xterm's own handlers
-  setTimeout(()=>{
-    const scr=document.querySelector('.xterm-screen');
-    if(!scr)return;
-    let ty=null,acc=0,active=false;
-    document.addEventListener('touchstart',e=>{
-      if(scr.contains(e.target)){ty=e.touches[0].clientY;acc=0;active=true}
-    },true);
-    document.addEventListener('touchmove',e=>{
-      if(!active||ty===null||!e.touches.length)return;
-      const y=e.touches[0].clientY;
-      acc+=ty-y;ty=y;
-      const lines=Math.trunc(acc/3);
-      if(lines){term.scrollLines(lines);acc-=lines*3}
-      e.preventDefault();
-    },{capture:true,passive:false});
-    document.addEventListener('touchend',()=>{ty=null;active=false},true);
-  },100);
   term.onData(d=>{if(ws&&ws.readyState===1){const e=new TextEncoder().encode(d);const buf=new Uint8Array(1+e.length);buf[0]=0x01;buf.set(e,1);ws.send(buf)}});
   let resizeTimer;
   term.onResize(({cols,rows})=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(ws&&ws.readyState===1){const buf=new Uint8Array(5);buf[0]=0x04;buf[1]=cols>>8;buf[2]=cols&0xff;buf[3]=rows>>8;buf[4]=rows&0xff;ws.send(buf)}},150)});
@@ -243,6 +225,7 @@ function refresh(){
 const ekDef=[
   {l:'ESC',seq:'\x1b'},{l:'TAB',seq:'\t'},{l:'CTRL',mod:true},{l:'ALT',mod:true},
   {l:'↑',seq:'\x1b[A'},{l:'↓',seq:'\x1b[B'},{l:'←',seq:'\x1b[D'},{l:'→',seq:'\x1b[C'},
+  {l:'PgUp',scroll:-15},{l:'PgDn',scroll:15},
   {l:'HOME',seq:'\x1b[H'},{l:'END',seq:'\x1b[F'},{l:'DEL',seq:'\x1b[3~'}
 ];
 const ekState={CTRL:0,ALT:0};
@@ -256,6 +239,14 @@ function initExtraKeys(){
         ekState[k.l]=(ekState[k.l]+1)%3;
         el.className='ek'+(ekState[k.l]===1?' armed':ekState[k.l]===2?' locked':'');
       });
+    }else if(k.scroll){
+      let iv;
+      const go=()=>{term.scrollLines(k.scroll);el.style.background='#1e293b'};
+      el.addEventListener('touchstart',e=>{e.preventDefault();go();iv=setInterval(go,80)});
+      el.addEventListener('touchend',()=>{clearInterval(iv);el.style.background=''});
+      el.addEventListener('mousedown',e=>{e.preventDefault();go();iv=setInterval(go,80)});
+      el.addEventListener('mouseup',()=>{clearInterval(iv);el.style.background=''});
+      el.addEventListener('mouseleave',()=>{clearInterval(iv);el.style.background=''});
     }else{
       el.addEventListener('click',()=>{
         el.style.background='#1e293b';setTimeout(()=>el.style.background='',120);
