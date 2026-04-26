@@ -5,10 +5,14 @@ File drop + web terminal. Single binary, no dependencies.
 ## Features
 
 - File upload/download with drag & drop
-- Persistent web terminal (survives reconnects)
-- Extra keys bar on mobile (ESC, TAB, CTRL, ALT, arrows, HOME, END, DEL)
+- **Tabbed web terminal** — multiple shell sessions, each with its own PTY
+  - Open/close/clear tabs, per-session reconnect
+  - Persistent sessions survive page reloads (ring buffer replay)
+- **Touch selection** (Acode-style) — long-press to select, drag handles, Copy/Paste/All menu
+- **Mobile optimized** — extra keys bar (ESC, TAB, CTRL, ALT, arrows, HOME, END, DEL), smooth touch scrolling, floating keyboard tracking
 - PWA installable
 - Basic auth
+- Single binary, no dependencies
 
 ## Build
 
