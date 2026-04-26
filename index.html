@@ -260,7 +260,12 @@ function sendEk(seq){
 initExtraKeys();
 if(isMobile&&window.visualViewport){
   const ek=document.getElementById('extra-keys');
-  const reposKeys=()=>{const off=window.innerHeight-visualViewport.height-visualViewport.offsetTop;ek.style.bottom=Math.max(0,off)+'px';if(term&&fit)try{fit.fit()}catch(e){}};
+  const reposKeys=()=>{
+    const off=window.innerHeight-visualViewport.height-visualViewport.offsetTop;
+    ek.style.bottom=Math.max(0,off)+'px';
+    document.body.style.height=visualViewport.height+'px';
+    if(term&&fit)try{fit.fit()}catch(e){}
+  };
   visualViewport.addEventListener('resize',reposKeys);
   visualViewport.addEventListener('scroll',reposKeys);
 }
