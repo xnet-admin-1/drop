@@ -126,7 +126,7 @@ function switchTab(name){
 
 function initTerm(){
   termInit=true;
-  term=new Terminal({cursorBlink:true,fontSize:14,scrollback:5000,tabStopWidth:4,fontFamily:'Menlo,Monaco,Consolas,monospace',fontWeightBold:'normal',allowProposedApi:true,theme:{background:'#0d1117',foreground:'#dcdcdc'}});
+  term=new Terminal({cursorBlink:true,fontSize:14,scrollback:5000,tabStopWidth:4,fontFamily:'Menlo,Monaco,Consolas,monospace',fontWeightBold:'normal',allowProposedApi:true,smoothScrollDuration:80,fastScrollSensitivity:5,scrollSensitivity:3,theme:{background:'#0d1117',foreground:'#dcdcdc'}});
   fit=new FitAddon.FitAddon();
   term.loadAddon(fit);
   term.loadAddon(new WebLinksAddon.WebLinksAddon());
