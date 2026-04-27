@@ -36,8 +36,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .item .info{padding:8px;font-size:11px;overflow:hidden}
 .item .name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text);font-weight:500}
 .item .meta{color:var(--dim);margin-top:2px}
+.item .dl{position:absolute;top:4px;right:32px;background:rgba(0,0,0,.7);color:var(--accent);font-size:14px;width:24px;height:24px;border-radius:50%;cursor:pointer;display:none;align-items:center;justify-content:center;text-decoration:none}
 .item .del{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.7);border:none;color:var(--red);font-size:14px;width:24px;height:24px;border-radius:50%;cursor:pointer;display:none;align-items:center;justify-content:center}
-.item:hover .del{display:flex}
+.item:hover .dl,.item:hover .del{display:flex}
 .empty{text-align:center;color:var(--dim);padding:40px;font-size:14px}
 .count{font-size:12px;color:var(--dim)}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--green);color:#000;padding:8px 20px;border-radius:20px;font-size:13px;font-weight:600;opacity:0;transition:opacity .3s;pointer-events:none;z-index:99}
@@ -279,7 +280,7 @@ async function load(){
   if(!files.length){g.innerHTML='<div class="empty">No files yet</div>';return}
   g.innerHTML=files.map(f=>{
     const thumb=f.isImage?`<img src="/api/files/${encodeURIComponent(f.name)}" loading="lazy" onclick="view('${f.name.replace(/'/g,"\\'")}')">`:`<div class="placeholder">${ext(f.name)}</div>`;
-    return`<div class="item">${thumb}<div class="info"><div class="name"><a href="/api/files/${encodeURIComponent(f.name)}" style="color:inherit;text-decoration:none" title="${f.name}">${f.name}</a></div><div class="meta">${fmt(f.size)} · ${new Date(f.modTime).toLocaleDateString()}</div></div><button class="del" onclick="del('${f.name.replace(/'/g,"\\'")}')">✕</button></div>`}).join('');
+    return`<div class="item">${thumb}<div class="info"><div class="name"><a href="/api/files/${encodeURIComponent(f.name)}" style="color:inherit;text-decoration:none" title="${f.name}">${f.name}</a></div><div class="meta">${fmt(f.size)} · ${new Date(f.modTime).toLocaleDateString()}</div></div><a class="dl" href="/api/files/${encodeURIComponent(f.name)}" download="${f.name}">⬇</a><button class="del" onclick="del('${f.name.replace(/'/g,"\\'")}')">✕</button></div>`}).join('');
 }
 function view(name){document.getElementById('lbi').src='/api/files/'+encodeURIComponent(name);document.getElementById('lb').classList.add('on')}
 async function del(name){if(!confirm('Delete '+name+'?'))return;await F('/api/files/'+encodeURIComponent(name),{method:'DELETE'});toast('Deleted');load()}
