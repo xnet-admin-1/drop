@@ -1,5 +1,7 @@
 box
 drop
+drop-*
+release/
 data/
 ztproxy/build/
 *.o

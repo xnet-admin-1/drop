@@ -36,9 +36,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .item .info{padding:8px;font-size:11px;overflow:hidden}
 .item .name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text);font-weight:500}
 .item .meta{color:var(--dim);margin-top:2px}
-.item .dl{position:absolute;top:4px;right:32px;background:rgba(0,0,0,.7);color:var(--accent);font-size:14px;width:24px;height:24px;border-radius:50%;cursor:pointer;display:none;align-items:center;justify-content:center;text-decoration:none}
-.item .del{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.7);border:none;color:var(--red);font-size:14px;width:24px;height:24px;border-radius:50%;cursor:pointer;display:none;align-items:center;justify-content:center}
-.item:hover .dl,.item:hover .del{display:flex}
+.item .dl{position:absolute;top:4px;right:40px;background:rgba(0,0,0,.7);color:var(--accent);font-size:18px;width:32px;height:32px;border-radius:50%;cursor:pointer;display:none;align-items:center;justify-content:center;text-decoration:none}
+.item .del{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.7);border:none;color:var(--red);font-size:18px;width:32px;height:32px;border-radius:50%;cursor:pointer;display:none;align-items:center;justify-content:center}
+.item .share{position:absolute;top:4px;right:76px;background:rgba(0,0,0,.7);border:none;color:var(--green);font-size:18px;width:32px;height:32px;border-radius:50%;cursor:pointer;display:none;align-items:center;justify-content:center}
+.item:hover .dl,.item:hover .del,.item:hover .share{display:flex}
+@media(hover:none){.item .dl,.item .del,.item .share{display:flex}}
 .empty{text-align:center;color:var(--dim);padding:40px;font-size:14px}
 .count{font-size:12px;color:var(--dim)}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--green);color:#000;padding:8px 20px;border-radius:20px;font-size:13px;font-weight:600;opacity:0;transition:opacity .3s;pointer-events:none;z-index:99}
@@ -273,17 +275,27 @@ window.addEventListener('resize',resize);
 new ResizeObserver(()=>{if(document.getElementById('term-panel').classList.contains('active'))resize()}).observe(document.getElementById('term-box'));
 
 // Files
+let currentPath='';
 async function load(){
-  const files=await(await F('/api/files')).json();
-  document.getElementById('count').textContent=files.length+' files';
+  const url=currentPath?'/api/files?path='+encodeURIComponent(currentPath):'/api/files';
+  const files=await(await F(url)).json();
+  document.getElementById('count').textContent=files.length+' items'+(currentPath?' · '+currentPath:'');
   const g=document.getElementById('grid');
-  if(!files.length){g.innerHTML='<div class="empty">No files yet</div>';return}
-  g.innerHTML=files.map(f=>{
-    const thumb=f.isImage?`<img src="/api/files/${encodeURIComponent(f.name)}" loading="lazy" onclick="view('${f.name.replace(/'/g,"\\'")}')">`:`<div class="placeholder">${ext(f.name)}</div>`;
-    return`<div class="item">${thumb}<div class="info"><div class="name"><a href="/api/files/${encodeURIComponent(f.name)}" style="color:inherit;text-decoration:none" title="${f.name}">${f.name}</a></div><div class="meta">${fmt(f.size)} · ${new Date(f.modTime).toLocaleDateString()}</div></div><a class="dl" href="/api/files/${encodeURIComponent(f.name)}" download="${f.name}">⬇</a><button class="del" onclick="del('${f.name.replace(/'/g,"\\'")}')">✕</button></div>`}).join('');
+  if(!files.length&&!currentPath){g.innerHTML='<div class="empty">No files yet</div>';return}
+  let html='';
+  if(currentPath){html+=`<div class="item" onclick="nav('')" style="cursor:pointer"><div class="placeholder">⬆</div><div class="info"><div class="name">.. back</div><div class="meta">Parent directory</div></div></div>`}
+  html+=files.map(f=>{
+    if(f.isDir){return`<div class="item" onclick="nav('${(currentPath?currentPath+'/':'')+f.name}')" style="cursor:pointer"><div class="placeholder">📁</div><div class="info"><div class="name">${f.name}</div><div class="meta">Folder</div></div><button class="del" onclick="event.stopPropagation();delDir('${(currentPath?currentPath+'/':'')+f.name}')">✕</button></div>`}
+    const fpath=currentPath?currentPath+'/'+f.name:f.name;
+    const thumb=f.isImage?`<img src="/api/files/${encodeURIComponent(fpath)}" loading="lazy" onclick="view('${fpath.replace(/'/g,"\\'")}')">`:`<div class="placeholder">${ext(f.name)}</div>`;
+    return`<div class="item">${thumb}<div class="info"><div class="name"><a href="/api/files/${encodeURIComponent(fpath)}" style="color:inherit;text-decoration:none" title="${f.name}">${f.name}</a></div><div class="meta">${fmt(f.size)} · ${new Date(f.modTime).toLocaleDateString()}</div></div><button class="share" onclick="share('${fpath.replace(/'/g,"\\'")}')">🔗</button><a class="dl" href="/api/files/${encodeURIComponent(fpath)}" download="${f.name}">⬇</a><button class="del" onclick="del('${fpath.replace(/'/g,"\\'")}')">✕</button></div>`}).join('');
+  g.innerHTML=html;
 }
+function nav(p){currentPath=p;load()}
+async function share(path){const r=await(await F('/api/shares',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path})})).json();if(r.url){const url=location.origin+r.url;await navigator.clipboard.writeText(url).catch(()=>{});toast('Link copied: '+url)}else{toast('Error: '+(r.error||'unknown'))}}
 function view(name){document.getElementById('lbi').src='/api/files/'+encodeURIComponent(name);document.getElementById('lb').classList.add('on')}
 async function del(name){if(!confirm('Delete '+name+'?'))return;await F('/api/files/'+encodeURIComponent(name),{method:'DELETE'});toast('Deleted');load()}
+async function delDir(name){if(!confirm('Delete folder '+name+' and all contents?'))return;await F('/api/files/'+encodeURIComponent(name),{method:'DELETE'});toast('Deleted');load()}
 async function upload(files){
   const bar=document.getElementById('bar'),fill=document.getElementById('fill');
   bar.classList.add('active');

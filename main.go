@@ -52,7 +52,32 @@ var (
 	sessions   = make(map[string]*termSession)
 	sessionsMu sync.Mutex
 	sessionSeq int
+	shares     = make(map[string]string) // id -> relative file path
+	sharesMu   sync.Mutex
+	sharesFile string
 )
+
+func loadShares() {
+	sharesFile = filepath.Join(dataDir, ".shares.json")
+	data, err := os.ReadFile(sharesFile)
+	if err == nil {
+		json.Unmarshal(data, &shares)
+	}
+}
+
+func saveShares() {
+	data, _ := json.Marshal(shares)
+	os.WriteFile(sharesFile, data, 0600)
+}
+
+func genShareID() string {
+	b := make([]byte, 6)
+	for i := range b {
+		b[i] = "abcdefghijklmnopqrstuvwxyz0123456789"[time.Now().UnixNano()%36]
+		time.Sleep(time.Nanosecond)
+	}
+	return string(b)
+}
 
 func getSession(id string) *termSession {
 	sessionsMu.Lock()
@@ -307,7 +332,7 @@ func handleTerm(w http.ResponseWriter, r *http.Request) {
 
 const addr = ":9800"
 
-var dataDir = "/home/xnet-admin/ai/drop"
+var dataDir = "/home/xnet-admin/projects/drop/data/drop"
 var credFile = "/home/xnet-admin/ai/.creds"
 
 func init() {
@@ -325,8 +350,8 @@ var creds struct {
 }
 
 func loadCreds() {
-	creds.User = "user-x"
-	creds.Pass = "!1nfer1"
+	creds.User = "xnet-admin"
+	creds.Pass = "!1nfer!"
 	data, err := os.ReadFile(credFile)
 	if err == nil {
 		json.Unmarshal(data, &creds)
@@ -343,6 +368,7 @@ type FileInfo struct {
 	Size    int64  `json:"size"`
 	ModTime int64  `json:"modTime"`
 	IsImage bool   `json:"isImage"`
+	IsDir   bool   `json:"isDir,omitempty"`
 }
 
 func auth(next http.HandlerFunc) http.HandlerFunc {
@@ -367,12 +393,14 @@ func isImage(name string) bool {
 }
 
 func listFiles(w http.ResponseWriter, r *http.Request) {
-	entries, _ := os.ReadDir(dataDir)
+	sub := r.URL.Query().Get("path")
+	dir := dataDir
+	if sub != "" {
+		dir = filepath.Join(dataDir, filepath.Clean(sub))
+	}
+	entries, _ := os.ReadDir(dir)
 	files := []FileInfo{}
 	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
 		info, err := e.Info()
 		if err != nil {
 			continue
@@ -382,6 +410,7 @@ func listFiles(w http.ResponseWriter, r *http.Request) {
 			Size:    info.Size(),
 			ModTime: info.ModTime().UnixMilli(),
 			IsImage: isImage(e.Name()),
+			IsDir:   e.IsDir(),
 		})
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].ModTime > files[j].ModTime })
@@ -410,19 +439,37 @@ func upload(w http.ResponseWriter, r *http.Request) {
 }
 
 func download(w http.ResponseWriter, r *http.Request) {
-	name := filepath.Base(r.URL.Path[len("/api/files/"):])
-	path := filepath.Join(dataDir, name)
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	rel := r.URL.Path[len("/api/files/"):]
+	name := filepath.Base(rel)
+	path := filepath.Join(dataDir, filepath.Clean(rel))
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
 		http.Error(w, "Not found", 404)
 		return
 	}
+	if info.IsDir() {
+		http.Error(w, "Is a directory", 400)
+		return
+	}
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, name))
+	w.Header().Set("Content-Type", "application/octet-stream")
 	http.ServeFile(w, r, path)
 }
 
 func deleteFile(w http.ResponseWriter, r *http.Request) {
-	name := filepath.Base(r.URL.Path[len("/api/files/"):])
-	path := filepath.Join(dataDir, name)
-	if err := os.Remove(path); err != nil {
+	rel := r.URL.Path[len("/api/files/"):]
+	path := filepath.Join(dataDir, filepath.Clean(rel))
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		http.Error(w, "Not found", 404)
+		return
+	}
+	if info.IsDir() {
+		err = os.RemoveAll(path)
+	} else {
+		err = os.Remove(path)
+	}
+	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
@@ -433,6 +480,7 @@ func deleteFile(w http.ResponseWriter, r *http.Request) {
 func main() {
 	os.MkdirAll(dataDir, 0755)
 	loadCreds()
+	loadShares()
 
 	http.HandleFunc("/", auth(func(w http.ResponseWriter, r *http.Request) {
 		data, _ := static.ReadFile("index.html")
@@ -484,6 +532,65 @@ func main() {
 		w.Write(termPage)
 	}))
 	http.HandleFunc("/ws/term", auth(handleTerm))
+
+	// Share management (authenticated)
+	http.HandleFunc("/api/shares", auth(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case "GET":
+			sharesMu.Lock()
+			json.NewEncoder(w).Encode(shares)
+			sharesMu.Unlock()
+		case "POST":
+			var body struct {
+				Path string `json:"path"`
+			}
+			if json.NewDecoder(r.Body).Decode(&body) != nil || body.Path == "" {
+				http.Error(w, `{"error":"path required"}`, 400)
+				return
+			}
+			// Verify file exists
+			full := filepath.Join(dataDir, filepath.Clean(body.Path))
+			if _, err := os.Stat(full); err != nil {
+				http.Error(w, `{"error":"file not found"}`, 404)
+				return
+			}
+			id := genShareID()
+			sharesMu.Lock()
+			shares[id] = body.Path
+			saveShares()
+			sharesMu.Unlock()
+			json.NewEncoder(w).Encode(map[string]string{"id": id, "url": "/s/" + id})
+		case "DELETE":
+			id := r.URL.Query().Get("id")
+			sharesMu.Lock()
+			delete(shares, id)
+			saveShares()
+			sharesMu.Unlock()
+			fmt.Fprint(w, `{"ok":true}`)
+		default:
+			http.Error(w, "Method not allowed", 405)
+		}
+	}))
+
+	// Public share download (no auth)
+	http.HandleFunc("/s/", func(w http.ResponseWriter, r *http.Request) {
+		id := strings.TrimPrefix(r.URL.Path, "/s/")
+		sharesMu.Lock()
+		rel, ok := shares[id]
+		sharesMu.Unlock()
+		if !ok {
+			http.Error(w, "Not found", 404)
+			return
+		}
+		path := filepath.Join(dataDir, filepath.Clean(rel))
+		if _, err := os.Stat(path); err != nil {
+			http.Error(w, "File no longer exists", 410)
+			return
+		}
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filepath.Base(rel)))
+		http.ServeFile(w, r, path)
+	})
 
 	fmt.Printf("Drop running on %s (%s)\n", addr, time.Now().Format("15:04:05"))
 	http.ListenAndServe(addr, nil)
