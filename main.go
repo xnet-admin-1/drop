@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -592,6 +594,71 @@ func main() {
 		http.ServeFile(w, r, path)
 	})
 
+	// Browser proxy
+	browserTarget, _ := url.Parse("http://10.8.1.3:9804")
+	browserProxy := httputil.NewSingleHostReverseProxy(browserTarget)
+	browserProxy.Director = func(req *http.Request) {
+		req.URL.Scheme = browserTarget.Scheme
+		req.URL.Host = browserTarget.Host
+		req.URL.Path = strings.TrimPrefix(req.URL.Path, "/browser")
+		if req.URL.Path == "" {
+			req.URL.Path = "/"
+		}
+		req.Host = browserTarget.Host
+	}
+	http.HandleFunc("/browser/ws", auth(func(w http.ResponseWriter, r *http.Request) {
+		// WebSocket proxy
+		target := "ws://10.8.1.3:9804/ws"
+		proxyWebSocket(w, r, target)
+	}))
+	http.HandleFunc("/browser", auth(func(w http.ResponseWriter, r *http.Request) {
+		browserProxy.ServeHTTP(w, r)
+	}))
+
 	fmt.Printf("Drop running on %s (%s)\n", addr, time.Now().Format("15:04:05"))
 	http.ListenAndServe(addr, nil)
+}
+
+func proxyWebSocket(w http.ResponseWriter, r *http.Request, target string) {
+	dialer := websocket.Dialer{}
+	backend, _, err := dialer.Dial(target, nil)
+	if err != nil {
+		http.Error(w, "backend unavailable", 502)
+		return
+	}
+	defer backend.Close()
+
+	client, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		return
+	}
+	defer client.Close()
+
+	done := make(chan struct{})
+
+	// backend -> client
+	go func() {
+		defer close(done)
+		for {
+			mt, msg, err := backend.ReadMessage()
+			if err != nil {
+				return
+			}
+			if err := client.WriteMessage(mt, msg); err != nil {
+				return
+			}
+		}
+	}()
+
+	// client -> backend
+	for {
+		mt, msg, err := client.ReadMessage()
+		if err != nil {
+			break
+		}
+		if err := backend.WriteMessage(mt, msg); err != nil {
+			break
+		}
+	}
+	<-done
 }
