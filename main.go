@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"box/mcpserver"
 	"github.com/creack/pty"
 	"github.com/gorilla/websocket"
 )
@@ -486,6 +485,7 @@ func main() {
 
 	http.HandleFunc("/", auth(func(w http.ResponseWriter, r *http.Request) {
 		data, _ := static.ReadFile("index.html")
+		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 		w.Header().Set("Content-Type", "text/html")
 		w.Write(data)
 	}))
@@ -594,27 +594,24 @@ func main() {
 		http.ServeFile(w, r, path)
 	})
 
-	// Browser proxy
-	browserTarget, _ := url.Parse("http://10.8.1.3:9804")
-	browserProxy := httputil.NewSingleHostReverseProxy(browserTarget)
-	browserProxy.Director = func(req *http.Request) {
-		req.URL.Scheme = browserTarget.Scheme
-		req.URL.Host = browserTarget.Host
-		req.URL.Path = strings.TrimPrefix(req.URL.Path, "/browser")
-		if req.URL.Path == "" {
-			req.URL.Path = "/"
-		}
-		req.Host = browserTarget.Host
+	// Browser
+	initBrowser()
+	if brow != nil {
+		mcpserver.SetBrowser(brow)
+		defer brow.Close()
 	}
-	http.HandleFunc("/browser/ws", auth(func(w http.ResponseWriter, r *http.Request) {
-		// WebSocket proxy
-		target := "ws://10.8.1.3:9804/ws"
-		proxyWebSocket(w, r, target)
-	}))
-	http.HandleFunc("/browser", auth(func(w http.ResponseWriter, r *http.Request) {
-		browserProxy.ServeHTTP(w, r)
-	}))
+	http.HandleFunc("/browser/ws", handleBrowserWS)
+	http.HandleFunc("/browser/screenshot", auth(handleBrowserScreenshot))
+	http.HandleFunc("/browser", auth(handleBrowserView))
 
+	// MCP
+		mcpHandler := mcpserver.ServeStreamable()
+	http.HandleFunc("/mcp", auth(func(w http.ResponseWriter, r *http.Request) {
+		mcpHandler.ServeHTTP(w, r)
+	}))
+	http.HandleFunc("/mcp/", auth(func(w http.ResponseWriter, r *http.Request) {
+		mcpHandler.ServeHTTP(w, r)
+	}))
 	fmt.Printf("Drop running on %s (%s)\n", addr, time.Now().Format("15:04:05"))
 	http.ListenAndServe(addr, nil)
 }

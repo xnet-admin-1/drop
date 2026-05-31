@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<title>Drop Browser</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0d1117;color:#e6edf3;font-family:system-ui;height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+.toolbar{display:flex;align-items:center;gap:4px;padding:4px 8px;background:#161b22;border-bottom:1px solid #30363d;flex-shrink:0}
+.toolbar button{background:#21262d;border:1px solid #30363d;color:#e6edf3;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:13px;line-height:1}
+.toolbar button:hover{background:#30363d}
+.toolbar button:active{background:#484f58}
+.toolbar button.active{background:#1f6feb;border-color:#1f6feb}
+#url-bar{flex:1;background:#0d1117;border:1px solid #30363d;color:#e6edf3;border-radius:4px;padding:4px 8px;font-size:13px;outline:none}
+#url-bar:focus{border-color:#1f6feb}
+.canvas-wrap{flex:1;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#000;position:relative}
+#screen{cursor:default;image-rendering:auto}
+.status{position:absolute;bottom:4px;left:8px;font-size:11px;color:#8b949e;pointer-events:none}
+#extra-keys{display:none;background:#161b22;flex-shrink:0;border-top:1px solid #30363d}
+@media(hover:none)and(pointer:coarse){#extra-keys{display:flex}}
+#extra-keys .ek{flex:1;text-align:center;padding:10px 0;font-size:12px;font-family:monospace;color:#e6edf3;background:#21262d;margin-right:1px;cursor:pointer;user-select:none;-webkit-user-select:none}
+#extra-keys .ek:active{background:#30363d}
+.zoom-info{position:absolute;top:4px;right:8px;font-size:11px;color:#8b949e;pointer-events:none}
+</style>
+</head><body>
+<div class="toolbar">
+  <button onclick="send({action:back})" title="Back">◀</button>
+  <button onclick="send({action:forward})" title="Forward">▶</button>
+  <button onclick="send({action:reload})" title="Reload">↻</button>
+  <input id="url-bar" type="text" placeholder="Enter URL..." onkeydown="if(event.key===Enter){send({action:navigate,url:this.value})}">
+  <button onclick="toggleKbd()" id="kbd-btn" title="Toggle Keyboard">⌨</button>
+  <button onclick="zoomIn()" title="Zoom In">+</button>
+  <button onclick="zoomOut()" title="Zoom Out">−</button>
+  <button onclick="zoom1to1()" title="1:1">1:1</button>
+  <button onclick="zoomFit()" title="Fit">Fit</button>
+</div>
+<div class="canvas-wrap" id="wrap">
+  <canvas id="screen" width="1280" height="720"></canvas>
+  <div class="status" id="status">Connecting...</div>
+  <div class="zoom-info" id="zoom-info">100%</div>
+</div>
+<div id="extra-keys">
+  <div class="ek" data-key="Escape">Esc</div>
+  <div class="ek" data-key="Tab">Tab</div>
+  <div class="ek" data-key="Control">Ctrl</div>
+  <div class="ek" data-key="Alt">Alt</div>
+  <div class="ek" data-key="ArrowUp">↑</div>
+  <div class="ek" data-key="ArrowDown">↓</div>
+  <div class="ek" data-key="ArrowLeft">←</div>
+  <div class="ek" data-key="ArrowRight">→</div>
+  <div class="ek" data-key="Enter">⏎</div>
+  <div class="ek" data-key="Backspace">⌫</div>
+</div>
+<script>
+const canvas=document.getElementById(screen),ctx=canvas.getContext(2d),wrap=document.getElementById(wrap);
+let ws,zoom=1,kbdActive=false,W=1280,H=720;
+
+function connect(){
+  const proto=location.protocol===https:?wss::ws:;
+  ws=new WebSocket(proto+//+location.host+/browser/ws);
+  ws.binaryType=arraybuffer;
+  ws.onopen=()=>{document.getElementById(status).textContent=Connected;send({action:geturl})};
+  ws.onmessage=e=>{
+    if(typeof e.data===string){
+      const m=JSON.parse(e.data);
+      if(m.url)document.getElementById(url-bar).value=m.url;
+      if(m.title)document.title=Drop - +m.title;
+    } else {
+      const blob=new Blob([e.data],{type:image/png});
+      const img=new Image();
+      img.onload=()=>{
+        if(img.width!==W||img.height!==H){W=img.width;H=img.height;canvas.width=W;canvas.height=H;applyZoom()}
+        ctx.drawImage(img,0,0);
+        URL.revokeObjectURL(img.src);
+      };
+      img.src=URL.createObjectURL(blob);
+    }
+  };
+  ws.onclose=()=>{document.getElementById(status).textContent=Disconnected;setTimeout(connect,2000)};
+}
+
+function send(msg){if(ws&&ws.readyState===1)ws.send(JSON.stringify(msg))}
+
+// Mouse events
+canvas.addEventListener(mousedown,e=>{e.preventDefault();const r=canvas.getBoundingClientRect();send({action:click,x:(e.clientX-r.left)/zoom,y:(e.clientY-r.top)/zoom,button:[left,middle,right][e.button]})});
+canvas.addEventListener(mousemove,e=>{const r=canvas.getBoundingClientRect();send({action:mousemove,x:(e.clientX-r.left)/zoom,y:(e.clientY-r.top)/zoom})});
+canvas.addEventListener(wheel,e=>{e.preventDefault();const r=canvas.getBoundingClientRect();send({action:scroll,x:(e.clientX-r.left)/zoom,y:(e.clientY-r.top)/zoom,deltaX:e.deltaX,deltaY:e.deltaY})},{passive:false});
+canvas.addEventListener(contextmenu,e=>e.preventDefault());
+
+// Touch events
+let lastTouch=null;
+canvas.addEventListener(touchstart,e=>{e.preventDefault();const t=e.touches[0],r=canvas.getBoundingClientRect();lastTouch={x:(t.clientX-r.left)/zoom,y:(t.clientY-r.top)/zoom};send({action:click,x:lastTouch.x,y:lastTouch.y,button:left})},{passive:false});
+canvas.addEventListener(touchmove,e=>{e.preventDefault();const t=e.touches[0],r=canvas.getBoundingClientRect();const x=(t.clientX-r.left)/zoom,y=(t.clientY-r.top)/zoom;if(lastTouch){send({action:scroll,x:lastTouch.x,y:lastTouch.y,deltaX:(lastTouch.x-x)*2,deltaY:(lastTouch.y-y)*2})}lastTouch={x,y}},{passive:false});
+
+// Keyboard
+document.addEventListener(keydown,e=>{
+  if(e.target===document.getElementById(url-bar))return;
+  if(!kbdActive)return;
+  e.preventDefault();
+  if(e.key.length===1){send({action:type,text:e.key})}
+  else{send({action:keydown,key:e.key,keyCode:e.keyCode})}
+});
+document.addEventListener(keyup,e=>{
+  if(e.target===document.getElementById(url-bar))return;
+  if(!kbdActive)return;
+  e.preventDefault();
+  if(e.key.length>1){send({action:keyup,key:e.key,keyCode:e.keyCode})}
+});
+
+// Extra keys
+document.querySelectorAll(.ek).forEach(el=>{
+  el.addEventListener(click,()=>{
+    const key=el.dataset.key;
+    send({action:keydown,key,keyCode:0});
+    setTimeout(()=>send({action:keyup,key,keyCode:0}),50);
+  });
+});
+
+// Keyboard toggle
+function toggleKbd(){kbdActive=!kbdActive;document.getElementById(kbd-btn).classList.toggle(active,kbdActive)}
+
+// Zoom
+function applyZoom(){canvas.style.width=(W*zoom)+px;canvas.style.height=(H*zoom)+px;document.getElementById(zoom-info).textContent=Math.round(zoom*100)+%}
+function zoomIn(){zoom=Math.min(zoom*1.25,3);applyZoom()}
+function zoomOut(){zoom=Math.max(zoom/1.25,0.25);applyZoom()}
+function zoom1to1(){zoom=1;applyZoom()}
+function zoomFit(){const wr=wrap.getBoundingClientRect();zoom=Math.min(wr.width/W,wr.height/H,1);applyZoom()}
+
+// Init
+zoomFit();
+connect();
+window.addEventListener(resize,()=>{if(zoom!==1)zoomFit()});
+</script>
+</body></html>
