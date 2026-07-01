@@ -1,6 +1,8 @@
 <!DOCTYPE html>
-<html><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
 <title>Drop Browser</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -16,17 +18,18 @@ body{background:#0d1117;color:#e6edf3;font-family:system-ui;height:100vh;height:
 #screen{cursor:default;image-rendering:auto}
 .status{position:absolute;bottom:4px;left:8px;font-size:11px;color:#8b949e;pointer-events:none}
 #extra-keys{display:none;background:#161b22;flex-shrink:0;border-top:1px solid #30363d}
-@media(hover:none)and(pointer:coarse){#extra-keys{display:flex}}
+@media(hover:none)and(pointer:coarse){.extra-keys{display:flex}}
 #extra-keys .ek{flex:1;text-align:center;padding:10px 0;font-size:12px;font-family:monospace;color:#e6edf3;background:#21262d;margin-right:1px;cursor:pointer;user-select:none;-webkit-user-select:none}
 #extra-keys .ek:active{background:#30363d}
 .zoom-info{position:absolute;top:4px;right:8px;font-size:11px;color:#8b949e;pointer-events:none}
 </style>
-</head><body>
+</head>
+<body>
 <div class="toolbar">
-  <button onclick="send({action:back})" title="Back">◀</button>
-  <button onclick="send({action:forward})" title="Forward">▶</button>
-  <button onclick="send({action:reload})" title="Reload">↻</button>
-  <input id="url-bar" type="text" placeholder="Enter URL..." onkeydown="if(event.key===Enter){send({action:navigate,url:this.value})}">
+  <button onclick="doAction({action:'back'})" title="Back">◀</button>
+  <button onclick="doAction({action:'forward'})" title="Forward">▶</button>
+  <button onclick="doAction({action:'reload'})" title="Reload">↻</button>
+  <input id="url-bar" type="text" placeholder="Enter URL..." onkeydown="if(event.key==='Enter'){doAction({action:'navigate',url:this.value})}">
   <button onclick="toggleKbd()" id="kbd-btn" title="Toggle Keyboard">⌨</button>
   <button onclick="zoomIn()" title="Zoom In">+</button>
   <button onclick="zoomOut()" title="Zoom Out">−</button>
@@ -51,21 +54,21 @@ body{background:#0d1117;color:#e6edf3;font-family:system-ui;height:100vh;height:
   <div class="ek" data-key="Backspace">⌫</div>
 </div>
 <script>
-const canvas=document.getElementById(screen),ctx=canvas.getContext(2d),wrap=document.getElementById(wrap);
+const canvas=document.getElementById('screen'),ctx=canvas.getContext('2d'),wrap=document.getElementById('wrap');
 let ws,zoom=1,kbdActive=false,W=1280,H=720;
 
 function connect(){
-  const proto=location.protocol===https:?wss::ws:;
-  ws=new WebSocket(proto+//+location.host+/browser/ws);
-  ws.binaryType=arraybuffer;
-  ws.onopen=()=>{document.getElementById(status).textContent=Connected;send({action:geturl})};
+  const proto=location.protocol==='https'?'wss':'ws:';
+  ws=new WebSocket(proto+'//'+location.host+'/browser/ws');
+  ws.binaryType='arraybuffer';
+  ws.onopen=()=>{document.getElementById('status').textContent='Connected';doAction({action:'geturl'})};
   ws.onmessage=e=>{
-    if(typeof e.data===string){
+    if(typeof e.data==='string'){
       const m=JSON.parse(e.data);
-      if(m.url)document.getElementById(url-bar).value=m.url;
-      if(m.title)document.title=Drop - +m.title;
+      if(m.url)document.getElementById('url-bar').value=m.url;
+      if(m.title)document.title='Drop - '+m.title;
     } else {
-      const blob=new Blob([e.data],{type:image/png});
+      const blob=new Blob([e.data],{type:'image/png'});
       const img=new Image();
       img.onload=()=>{
         if(img.width!==W||img.height!==H){W=img.width;H=img.height;canvas.width=W;canvas.height=H;applyZoom()}
@@ -75,51 +78,68 @@ function connect(){
       img.src=URL.createObjectURL(blob);
     }
   };
-  ws.onclose=()=>{document.getElementById(status).textContent=Disconnected;setTimeout(connect,2000)};
+  ws.onclose=()=>{document.getElementById('status').textContent='Disconnected';setTimeout(connect,2000)};
 }
 
-function send(msg){if(ws&&ws.readyState===1)ws.send(JSON.stringify(msg))}
+// Send to browser and report to chat
+function doAction(msg){
+  if(ws&&ws.readyState===1)ws.send(JSON.stringify(msg));
+  
+  // Report certain actions to chat server
+  const reportActions=['click','scroll','navigate','back','forward','reload','keydown','keyup','type'];
+  if(reportActions.includes(msg.action)){
+    fetch('/browser/event',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(msg)
+    }).then(r=>r.json()).then(d=>{
+      if(d.message)console.log('[chat] '+d.message);
+    }).catch(()=>{});
+  }
+}
+
+function send(msg){doAction(msg)}
 
 // Mouse events
-canvas.addEventListener(mousedown,e=>{e.preventDefault();const r=canvas.getBoundingClientRect();send({action:click,x:(e.clientX-r.left)/zoom,y:(e.clientY-r.top)/zoom,button:[left,middle,right][e.button]})});
-canvas.addEventListener(mousemove,e=>{const r=canvas.getBoundingClientRect();send({action:mousemove,x:(e.clientX-r.left)/zoom,y:(e.clientY-r.top)/zoom})});
-canvas.addEventListener(wheel,e=>{e.preventDefault();const r=canvas.getBoundingClientRect();send({action:scroll,x:(e.clientX-r.left)/zoom,y:(e.clientY-r.top)/zoom,deltaX:e.deltaX,deltaY:e.deltaY})},{passive:false});
-canvas.addEventListener(contextmenu,e=>e.preventDefault());
+canvas.addEventListener('mousedown',e=>{e.preventDefault();const r=canvas.getBoundingClientRect();doAction({action:'click',x:(e.clientX-r.left)/zoom,y:(e.clientY-r.top)/zoom,button:['left','middle','right'][e.button]})});
+canvas.addEventListener('mousemove',e=>{const r=canvas.getBoundingClientRect();doAction({action:'mousemove',x:(e.clientX-r.left)/zoom,y:(e.clientY-r.top)/zoom})});
+canvas.addEventListener('wheel',e=>{e.preventDefault();const r=canvas.getBoundingClientRect();doAction({action:'scroll',x:(e.clientX-r.left)/zoom,y:(e.clientY-r.top)/zoom,deltaX:e.deltaX,deltaY:e.deltaY})},{passive:false});
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
 
 // Touch events
 let lastTouch=null;
-canvas.addEventListener(touchstart,e=>{e.preventDefault();const t=e.touches[0],r=canvas.getBoundingClientRect();lastTouch={x:(t.clientX-r.left)/zoom,y:(t.clientY-r.top)/zoom};send({action:click,x:lastTouch.x,y:lastTouch.y,button:left})},{passive:false});
-canvas.addEventListener(touchmove,e=>{e.preventDefault();const t=e.touches[0],r=canvas.getBoundingClientRect();const x=(t.clientX-r.left)/zoom,y=(t.clientY-r.top)/zoom;if(lastTouch){send({action:scroll,x:lastTouch.x,y:lastTouch.y,deltaX:(lastTouch.x-x)*2,deltaY:(lastTouch.y-y)*2})}lastTouch={x,y}},{passive:false});
+canvas.addEventListener('touchstart',e=>{e.preventDefault();const t=e.touches[0],r=canvas.getBoundingClientRect();lastTouch={x:(t.clientX-r.left)/zoom,y:(t.clientY-r.top)/zoom};doAction({action:'click',x:lastTouch.x,y:lastTouch.y,button:'left'})},{passive:false});
+canvas.addEventListener('touchmove',e=>{e.preventDefault();const t=e.touches[0],r=canvas.getBoundingClientRect();const x=(t.clientX-r.left)/zoom,y=(t.clientY-r.top)/zoom;if(lastTouch){doAction({action:'scroll',x:lastTouch.x,y:lastTouch.y,deltaX:(lastTouch.x-x)*2,deltaY:(lastTouch.y-y)*2})}lastTouch={x,y}},{passive:false});
 
 // Keyboard
-document.addEventListener(keydown,e=>{
-  if(e.target===document.getElementById(url-bar))return;
+document.addEventListener('keydown',e=>{
+  if(e.target===document.getElementById('url-bar'))return;
   if(!kbdActive)return;
   e.preventDefault();
-  if(e.key.length===1){send({action:type,text:e.key})}
-  else{send({action:keydown,key:e.key,keyCode:e.keyCode})}
+  if(e.key.length===1){doAction({action:'type',text:e.key})}
+  else{doAction({action:'keydown',key:e.key,keyCode:e.keyCode})}
 });
-document.addEventListener(keyup,e=>{
-  if(e.target===document.getElementById(url-bar))return;
+document.addEventListener('keyup',e=>{
+  if(e.target===document.getElementById('url-bar'))return;
   if(!kbdActive)return;
   e.preventDefault();
-  if(e.key.length>1){send({action:keyup,key:e.key,keyCode:e.keyCode})}
+  if(e.key.length>1){doAction({action:'keyup',key:e.key,keyCode:e.keyCode})}
 });
 
 // Extra keys
-document.querySelectorAll(.ek).forEach(el=>{
-  el.addEventListener(click,()=>{
+document.querySelectorAll('.ek').forEach(el=>{
+  el.addEventListener('click',()=>{
     const key=el.dataset.key;
-    send({action:keydown,key,keyCode:0});
-    setTimeout(()=>send({action:keyup,key,keyCode:0}),50);
+    doAction({action:'keydown',key:key,keyCode:0});
+    setTimeout(()=>doAction({action:'keyup',key:key,keyCode:0}),50);
   });
 });
 
 // Keyboard toggle
-function toggleKbd(){kbdActive=!kbdActive;document.getElementById(kbd-btn).classList.toggle(active,kbdActive)}
+function toggleKbd(){kbdActive=!kbdActive;document.getElementById('kbd-btn').classList.toggle('active',kbdActive)}
 
 // Zoom
-function applyZoom(){canvas.style.width=(W*zoom)+px;canvas.style.height=(H*zoom)+px;document.getElementById(zoom-info).textContent=Math.round(zoom*100)+%}
+function applyZoom(){canvas.style.width=(W*zoom)+'px';canvas.style.height=(H*zoom)+'px';document.getElementById('zoom-info').textContent=Math.round(zoom*100)+'%'}
 function zoomIn(){zoom=Math.min(zoom*1.25,3);applyZoom()}
 function zoomOut(){zoom=Math.max(zoom/1.25,0.25);applyZoom()}
 function zoom1to1(){zoom=1;applyZoom()}
@@ -128,6 +148,7 @@ function zoomFit(){const wr=wrap.getBoundingClientRect();zoom=Math.min(wr.width/
 // Init
 zoomFit();
 connect();
-window.addEventListener(resize,()=>{if(zoom!==1)zoomFit()});
+window.addEventListener('resize',()=>{if(zoom!==1)zoomFit()});
 </script>
-</body></html>
+</body>
+</html>

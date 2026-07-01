@@ -1,6 +1,6 @@
 # Drop
 
-File drop + web terminal. Single binary, no dependencies.
+File drop + web terminal + joint user/agent browser. Single binary, no dependencies.
 
 ## Features
 
@@ -10,9 +10,38 @@ File drop + web terminal. Single binary, no dependencies.
   - Persistent sessions survive page reloads (ring buffer replay)
 - **Touch selection** (Acode-style) — long-press to select, drag handles, Copy/Paste/All menu
 - **Mobile optimized** — extra keys bar (ESC, TAB, CTRL, ALT, arrows, HOME, END, DEL), smooth touch scrolling, floating keyboard tracking
+- **Joint user/agent browser** — Headless Chrome with real-time streaming, controllable by both user and AI agent
 - PWA installable
 - Basic auth
-- Single binary, no dependencies
+- Single binary, no dependencies (except Chrome, see below)
+
+## Browser
+
+The joint browser feature requires Chrome/Chromium to be installed on the system.
+
+### Setup
+
+Run the setup script to install Chromium:
+
+```bash
+make setup-browser
+# or directly
+./scripts/setup-browser.sh
+```
+
+This will detect your OS and install the appropriate browser package.
+
+### Manual Installation
+
+If the setup script doesn't work for your system:
+
+| OS | Command |
+|----|---------|
+| Ubuntu/Debian | `apt-get install chromium-browser` |
+| Alpine | `apk add chromium` |
+| macOS | `brew install chromium` |
+
+Make sure `google-chrome`, `chromium-browser`, or `chromium` is in your PATH.
 
 ## Build
 
@@ -20,6 +49,8 @@ File drop + web terminal. Single binary, no dependencies.
 
 ```bash
 go build -o drop .
+# or
+make build
 ```
 
 ### Container
@@ -68,3 +99,14 @@ docker compose up -d
 | `DROP_CREDS` | `~/ai/.creds` | Credentials file (`user:pass`) |
 
 Listens on `:9800`.
+
+## Browser Features
+
+The joint browser allows both user and AI agent to interact with the same browser tab:
+
+- **Real-time streaming** — 15fps screenshot updates via WebSocket
+- **User controls** — Click, type, scroll, back/forward in the browser view
+- **Agent controls** — AI agent can navigate, click, type via MCP tools
+- **Shared state** — Both see the same page content
+
+Access the browser at `/browser_view.html`.

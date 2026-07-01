@@ -115,13 +115,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <button onclick="brSend({action:'forward'})" style="background:#21262d;border:1px solid #30363d;color:#e6edf3;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:13px">▶</button>
   <button onclick="brSend({action:'reload'})" style="background:#21262d;border:1px solid #30363d;color:#e6edf3;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:13px">↻</button>
   <input id="br-url" type="text" placeholder="URL..." onkeydown="if(event.key==='Enter')brSend({action:'navigate',url:this.value})" style="flex:1;background:#0d1117;border:1px solid #30363d;color:#e6edf3;border-radius:4px;padding:4px 8px;font-size:13px;outline:none">
-  <button onclick="brKbd=!brKbd;this.style.background=brKbd?'#1f6feb':'#21262d'" style="background:#21262d;border:1px solid #30363d;color:#e6edf3;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:13px">⌨</button>
+  <button onclick="brToggleKbd(this)" id="br-kbd-btn" style="background:#21262d;border:1px solid #30363d;color:#e6edf3;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:13px">⌨</button>
   <button onclick="brZoom(1.25)" style="background:#21262d;border:1px solid #30363d;color:#e6edf3;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:13px">+</button>
   <button onclick="brZoom(0.8)" style="background:#21262d;border:1px solid #30363d;color:#e6edf3;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:13px">−</button>
   <button onclick="brScale=1;brApply()" style="background:#21262d;border:1px solid #30363d;color:#e6edf3;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:13px">1:1</button>
+  <button onclick="brFit()" style="background:#21262d;border:1px solid #30363d;color:#e6edf3;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:13px">Fit</button>
 </div>
 <div style="flex:1;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#000;position:relative" id="br-wrap">
-  <canvas id="br-canvas" width="1280" height="720" style="cursor:default;width:100%;height:auto;max-height:100%"></canvas>
+  <canvas id="br-canvas" width="1280" height="720" style="cursor:default"></canvas>
+  <input id="br-kbd-input" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" style="position:fixed;top:-100px;left:0;width:1px;height:1px;opacity:0;pointer-events:none">
   <div style="position:absolute;bottom:4px;left:8px;font-size:11px;color:#8b949e" id="br-status">Connecting...</div>
 </div>
 </div>
@@ -166,6 +168,7 @@ function switchTab(name){
     const s=termSessions[activeSessionId];
     if(s&&s.fit)setTimeout(()=>{try{s.fit.fit()}catch(e){}},100);
   }
+  if(name==='browser')setTimeout(brFit,50);
 }
 
 async function newTermTab(){
@@ -318,7 +321,7 @@ async function delDir(name){if(!confirm('Delete folder '+name+' and all contents
 async function upload(files){
   const bar=document.getElementById('bar'),fill=document.getElementById('fill');
   bar.classList.add('active');
-  for(let i=0;i<files.length;i++){fill.style.width=((i/files.length)*100)+'%';const fd=new FormData();fd.append('file',files[i]);await F('/api/files',{method:'POST',body:fd})}
+  for(let i=0;i<files.length;i++){fill.style.width=((i/files.length)*100)+'%';const fd=new FormData();fd.append('file',files[i]);if(currentPath)fd.append('path',currentPath);await F('/api/files',{method:'POST',body:fd})}
   fill.style.width='100%';setTimeout(()=>{bar.classList.remove('active');fill.style.width='0'},500);
   toast(files.length+' file'+(files.length>1?'s':'')+' uploaded');load();
 }
@@ -405,16 +408,35 @@ function brConnect(){
   };
   brWs.onclose=()=>{document.getElementById("br-status").textContent="Reconnecting...";setTimeout(brConnect,2000)};
 }
-function toggleBrKbd(){brKbd=!brKbd;document.getElementById(br-kbd-btn).style.background=brKbd?#1f6feb:#21262d}
-function brSend(m){if(brWs&&brWs.readyState===1)brWs.send(JSON.stringify(m))}
+function toggleBrKbd(){brKbd=!brKbd}
+function brToggleKbd(btn){brKbd=!brKbd;btn.style.background=brKbd?'#1f6feb':'#21262d';const inp=document.getElementById('br-kbd-input');if(brKbd){inp.style.pointerEvents='auto';inp.focus()}else{inp.blur();inp.style.pointerEvents='none'}}
+document.getElementById('br-kbd-input').addEventListener('input',e=>{if(e.inputType==='insertLineBreak'||e.inputType==='insertParagraph'){brSend({action:'keydown',key:'Enter',keyCode:13})}else if(e.data){brSend({action:'type',text:e.data})}e.target.value='';});
+document.getElementById('br-kbd-input').addEventListener('keydown',e=>{const keys=['Backspace','Enter','Tab','Escape','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'];if(keys.includes(e.key)){e.preventDefault();brSend({action:'keydown',key:e.key,keyCode:e.keyCode})}});
+function brSend(m){
+  if(brWs&&brWs.readyState===1)brWs.send(JSON.stringify(m));
+  // Report actions to chat
+  const reportActions=['click','scroll','navigate','back','forward','reload','keydown','keyup','type'];
+  if(reportActions.includes(m.action)){
+    fetch('/browser/event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(m)}).then(r=>r.json()).catch(()=>{});
+  }
+}
 function brZoom(f){brScale=Math.max(0.25,Math.min(3,brScale*f));brApply()}
 function brApply(){brCanvas.style.width=(brW*brScale)+"px";brCanvas.style.height=(brH*brScale)+"px"}
-brCanvas.addEventListener("mousedown",e=>{e.preventDefault();const r=brCanvas.getBoundingClientRect();brSend({action:"click",x:(e.clientX-r.left)/brScale,y:(e.clientY-r.top)/brScale,button:["left","middle","right"][e.button]})});
-brCanvas.addEventListener("wheel",e=>{e.preventDefault();const r=brCanvas.getBoundingClientRect();brSend({action:"scroll",x:(e.clientX-r.left)/brScale,y:(e.clientY-r.top)/brScale,deltaX:e.deltaX,deltaY:e.deltaY})},{passive:false});
-brCanvas.addEventListener("touchstart",e=>{e.preventDefault();const t=e.touches[0],r=brCanvas.getBoundingClientRect();brSend({action:"click",x:(t.clientX-r.left)/brScale,y:(t.clientY-r.top)/brScale,button:"left"})},{passive:false});
-document.addEventListener("keydown",e=>{if(!brKbd||e.target.tagName==="INPUT")return;e.preventDefault();if(e.key.length===1)brSend({action:"type",text:e.key});else brSend({action:"keydown",key:e.key,keyCode:e.keyCode})});
-document.addEventListener("keyup",e=>{if(!brKbd||e.target.tagName==="INPUT")return;e.preventDefault();if(e.key.length>1)brSend({action:"keyup",key:e.key,keyCode:e.keyCode})});
+function brFit(){const wr=document.getElementById("br-wrap").getBoundingClientRect();brScale=Math.min(wr.width/brW,wr.height/brH,1);brApply()}
+function brXY(e){const r=brCanvas.getBoundingClientRect();const sx=brW/r.width,sy=brH/r.height;return{x:(e.clientX-r.left)*sx,y:(e.clientY-r.top)*sy}}
+brCanvas.addEventListener("mousedown",e=>{e.preventDefault();const p=brXY(e);brSend({action:"click",x:p.x,y:p.y,button:["left","middle","right"][e.button]})});
+brCanvas.addEventListener("wheel",e=>{e.preventDefault();const p=brXY(e);brSend({action:"scroll",x:p.x,y:p.y,deltaX:e.deltaX,deltaY:e.deltaY})},{passive:false});
+let brLastTouch=null,brTouchMoved=false,brTwoFinger=false,brTouchStart=null;
+function brTXY(t){const r=brCanvas.getBoundingClientRect();return{x:(t.clientX-r.left)*(brW/r.width),y:(t.clientY-r.top)*(brH/r.height)}}
+brCanvas.addEventListener("touchstart",e=>{e.preventDefault();brTouchMoved=false;brTwoFinger=e.touches.length>1;brLastTouch=brTXY(e.touches[0]);brTouchStart={x:brLastTouch.x,y:brLastTouch.y};const inp=document.getElementById('br-kbd-input');if(document.activeElement===inp){inp.blur();inp.style.pointerEvents='none';brKbd=false;document.getElementById('br-kbd-btn').style.background='#21262d'}},{passive:false});
+brCanvas.addEventListener("touchmove",e=>{e.preventDefault();if(e.touches.length>=2)brTwoFinger=true;const p=brTXY(e.touches[0]);if(brTouchStart){const dx=p.x-brTouchStart.x,dy=p.y-brTouchStart.y;if(dx*dx+dy*dy>100)brTouchMoved=true}if(brTouchMoved&&brLastTouch){brSend({action:"scroll",x:brLastTouch.x,y:brLastTouch.y,deltaX:(brLastTouch.x-p.x)*2,deltaY:(brLastTouch.y-p.y)*2})}brLastTouch=p},{passive:false});
+brCanvas.addEventListener("touchend",e=>{e.preventDefault();if(!brTouchMoved&&!brTwoFinger&&brLastTouch){brSend({action:"click",x:brLastTouch.x,y:brLastTouch.y,button:"left"})}brTwoFinger=false;brLastTouch=null;brTouchStart=null},{passive:false});
+document.addEventListener("keydown",e=>{if(!brKbd||e.target.tagName==="INPUT"||!document.getElementById("browser-panel").classList.contains("active"))return;e.preventDefault();if(e.key.length===1)brSend({action:"type",text:e.key});else brSend({action:"keydown",key:e.key,keyCode:e.keyCode})});
+document.addEventListener("keyup",e=>{if(!brKbd||e.target.tagName==="INPUT"||!document.getElementById("browser-panel").classList.contains("active"))return;e.preventDefault();if(e.key.length>1)brSend({action:"keyup",key:e.key,keyCode:e.keyCode})});
 brConnect();
+brFit();
+window.addEventListener("resize",()=>{if(document.getElementById("browser-panel").classList.contains("active"))brFit()});
+screen.orientation&&screen.orientation.addEventListener("change",()=>setTimeout(brFit,100));
 </script>
 </body>
 </html>

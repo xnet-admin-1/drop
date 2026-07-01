@@ -5,3 +5,5 @@ release/
 data/
 ztproxy/build/
 *.o
+.chromium/
+app-release.apk

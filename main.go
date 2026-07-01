@@ -331,10 +331,11 @@ func handleTerm(w http.ResponseWriter, r *http.Request) {
 	close(closed)
 }
 
-const addr = ":9800"
+var addr = ":9800"
+func init() { if v := os.Getenv("DROP_ADDR"); v != "" { addr = v } }
 
-var dataDir = "/home/xnet-admin/projects/drop/data/drop"
-var credFile = "/home/xnet-admin/ai/.creds"
+var dataDir = "./data"
+var credFile = "./.creds"
 
 func init() {
 	if v := os.Getenv("DROP_DATA"); v != "" {
@@ -351,8 +352,6 @@ var creds struct {
 }
 
 func loadCreds() {
-	creds.User = "xnet-admin"
-	creds.Pass = "!1nfer!"
 	data, err := os.ReadFile(credFile)
 	if err == nil {
 		json.Unmarshal(data, &creds)
@@ -374,6 +373,10 @@ type FileInfo struct {
 
 func auth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if creds.User == "" && creds.Pass == "" {
+			next(w, r)
+			return
+		}
 		u, p, ok := r.BasicAuth()
 		if !ok || subtle.ConstantTimeCompare([]byte(u), []byte(creds.User)) != 1 || subtle.ConstantTimeCompare([]byte(p), []byte(creds.Pass)) != 1 {
 			w.Header().Set("WWW-Authenticate", `Basic realm="drop"`)
@@ -428,7 +431,12 @@ func upload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 	name := filepath.Base(header.Filename)
-	dst, err := os.Create(filepath.Join(dataDir, name))
+	dir := dataDir
+	if sub := r.FormValue("path"); sub != "" {
+		dir = filepath.Join(dataDir, filepath.Clean(sub))
+		os.MkdirAll(dir, 0755)
+	}
+	dst, err := os.Create(filepath.Join(dir, name))
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -601,6 +609,8 @@ func main() {
 		defer brow.Close()
 	}
 	http.HandleFunc("/browser/ws", handleBrowserWS)
+	http.HandleFunc("/browser/event", handleBrowserEvent)
+	http.HandleFunc("/browser/events", getBrowserEvents)
 	http.HandleFunc("/browser/screenshot", auth(handleBrowserScreenshot))
 	http.HandleFunc("/browser", auth(handleBrowserView))
 
